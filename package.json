@@ -8,7 +8,7 @@
     "start": "next start",
     "create-admin": "tsx scripts/create-admin.ts",
     "lint": "eslint",
-    "postinstall": "prisma skills sync || exit 0"
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
