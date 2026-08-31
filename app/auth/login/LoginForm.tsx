@@ -563,6 +563,7 @@ export default function LoginForm() {
                       : "login"
                   )
                 }
+                
                 className="mt-2 text-sm font-semibold text-[#9b752e] hover:underline"
               >
                 {mode === "login"
