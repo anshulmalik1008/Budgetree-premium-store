@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/auth";
 
+type RouteContext = {
+  params: Promise<{
+    id: string;
+  }>;
+};
+
 export async function GET(
-  request: Request,
-  context: {
-    params: Promise<{ id: string }>;
-  }
+  _request: Request,
+  context: RouteContext
 ) {
   try {
     const userId = await getCurrentUserId();
@@ -24,7 +28,7 @@ export async function GET(
     const { id } = await context.params;
     const orderId = Number(id);
 
-    if (!orderId || Number.isNaN(orderId)) {
+    if (!Number.isInteger(orderId) || orderId <= 0) {
       return NextResponse.json(
         {
           success: false,
@@ -72,6 +76,7 @@ export async function GET(
       order: {
         id: order.id,
         orderNumber: order.orderNumber,
+
         customerName: order.customerName,
         customerEmail: order.customerEmail,
         customerPhone: order.customerPhone,
@@ -101,7 +106,8 @@ export async function GET(
           quantity: item.quantity,
           price: item.price.toString(),
           total: item.total.toString(),
-          image: item.product?.images?.[0]?.url ?? null,
+          image:
+            item.product?.images?.[0]?.url ?? null,
         })),
       },
     });

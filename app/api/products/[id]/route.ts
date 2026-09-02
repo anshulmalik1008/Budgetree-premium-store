@@ -7,16 +7,93 @@ type RouteContext = {
   }>;
 };
 
+function getProductId(value: string) {
+  const id = Number(value);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return null;
+  }
+
+  return id;
+}
+
+function cleanString(value: unknown) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim();
+}
+
+function getNumber(value: unknown, fallback = 0) {
+  const number = Number(value);
+
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function getNullableNumber(value: unknown) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  const number = Number(value);
+
+  return Number.isFinite(number) ? number : null;
+}
+
+function getBoolean(value: unknown) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return [
+      "true",
+      "1",
+      "yes",
+      "on",
+    ].includes(value.toLowerCase().trim());
+  }
+
+  if (typeof value === "number") {
+    return value === 1;
+  }
+
+  return false;
+}
+
+function getImages(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(
+      (item): item is string =>
+        typeof item === "string"
+    )
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+// ======================================================
 // GET PRODUCT
+// ======================================================
+
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: RouteContext
 ) {
   try {
     const { id } = await context.params;
-    const productId = Number(id);
 
-    if (!Number.isInteger(productId)) {
+    const productId = getProductId(id);
+
+    if (!productId) {
       return NextResponse.json(
         {
           success: false,
@@ -26,19 +103,22 @@ export async function GET(
       );
     }
 
-    const product = await prisma.product.findUnique({
-      where: {
-        id: productId,
-      },
-      include: {
-        category: true,
-        images: {
-          orderBy: {
-            sortOrder: "asc",
+    const product =
+      await prisma.product.findUnique({
+        where: {
+          id: productId,
+        },
+
+        include: {
+          category: true,
+
+          images: {
+            orderBy: {
+              sortOrder: "asc",
+            },
           },
         },
-      },
-    });
+      });
 
     if (!product) {
       return NextResponse.json(
@@ -55,7 +135,10 @@ export async function GET(
       product,
     });
   } catch (error) {
-    console.error("GET PRODUCT ERROR:", error);
+    console.error(
+      "GET PRODUCT ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
@@ -67,16 +150,20 @@ export async function GET(
   }
 }
 
+// ======================================================
 // UPDATE PRODUCT
+// ======================================================
+
 export async function PUT(
   request: NextRequest,
   context: RouteContext
 ) {
   try {
     const { id } = await context.params;
-    const productId = Number(id);
 
-    if (!Number.isInteger(productId)) {
+    const productId = getProductId(id);
+
+    if (!productId) {
       return NextResponse.json(
         {
           success: false,
@@ -88,32 +175,14 @@ export async function PUT(
 
     const body = await request.json();
 
-    const {
-      name,
-      slug,
-      description,
-      price,
-      salePrice,
-      stock,
-      categoryId,
-      featured,
-      images,
-    } = body;
-
-    if (!name || !slug || price === undefined) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Name, slug and price are required",
-        },
-        { status: 400 }
-      );
-    }
-
     const existingProduct =
       await prisma.product.findUnique({
         where: {
           id: productId,
+        },
+
+        include: {
+          images: true,
         },
       });
 
@@ -127,94 +196,211 @@ export async function PUT(
       );
     }
 
-    const product = await prisma.$transaction(
-      async (tx) => {
-        // Update product
-        await tx.product.update({
-          where: {
-            id: productId,
-          },
+    const name = cleanString(body.name);
 
-          data: {
-            name: name.trim(),
-            slug: slug.trim(),
-            description:
-              description?.trim() || null,
+    if (!name) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Product name is required",
+        },
+        { status: 400 }
+      );
+    }
 
-            price: Number(price),
+    const slug =
+      cleanString(body.slug) ||
+      existingProduct.slug;
 
-            salePrice:
-              salePrice !== null &&
-              salePrice !== undefined &&
-              salePrice !== ""
-                ? Number(salePrice)
-                : null,
+    const price = getNumber(
+      body.price,
+      Number(existingProduct.price)
+    );
 
-            stock: Number(stock) || 0,
+    if (price < 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Price cannot be negative",
+        },
+        { status: 400 }
+      );
+    }
 
-            categoryId:
-              categoryId !== null &&
-              categoryId !== undefined &&
-              categoryId !== ""
-                ? Number(categoryId)
-                : null,
+    const salePrice =
+      body.salePrice !== undefined
+        ? getNullableNumber(body.salePrice)
+        : existingProduct.salePrice !== null
+          ? Number(existingProduct.salePrice)
+          : null;
 
-            featured: Boolean(featured),
-          },
-        });
+    if (
+      salePrice !== null &&
+      salePrice < 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Sale price cannot be negative",
+        },
+        { status: 400 }
+      );
+    }
 
-        // Update images only when images are sent
-        if (Array.isArray(images)) {
-          await tx.productImage.deleteMany({
+    const stock =
+      body.stock !== undefined
+        ? Math.max(
+            0,
+            Math.floor(
+              getNumber(body.stock, 0)
+            )
+          )
+        : existingProduct.stock;
+
+    let categoryId =
+      existingProduct.categoryId;
+
+    if (
+      body.categoryId !== undefined
+    ) {
+      if (
+        body.categoryId === null ||
+        body.categoryId === ""
+      ) {
+        categoryId = null;
+      } else {
+        const parsedCategoryId =
+          Number(body.categoryId);
+
+        if (
+          !Number.isInteger(
+            parsedCategoryId
+          )
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "Invalid category ID",
+            },
+            { status: 400 }
+          );
+        }
+
+        const category =
+          await prisma.category.findUnique({
             where: {
-              productId,
+              id: parsedCategoryId,
             },
           });
 
-          if (images.length > 0) {
-            await tx.productImage.createMany({
-              data: images
-                .filter(
-                  (image: unknown) =>
-                    typeof image === "string" &&
-                    image.trim().length > 0
-                )
-                .map(
-                  (
-                    image: string,
-                    index: number
-                  ) => ({
-                    productId,
-                    url: image.trim(),
-                    sortOrder: index,
-                  })
-                ),
-            });
-          }
+        if (!category) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "Selected category not found",
+            },
+            { status: 400 }
+          );
         }
 
-        return tx.product.findUnique({
-          where: {
-            id: productId,
-          },
+        categoryId =
+          parsedCategoryId;
+      }
+    }
 
-          include: {
-            category: true,
+    const featured =
+      body.featured !== undefined
+        ? getBoolean(body.featured)
+        : existingProduct.featured;
 
-            images: {
-              orderBy: {
-                sortOrder: "asc",
+    const description =
+      body.description !== undefined
+        ? cleanString(body.description) ||
+          null
+        : existingProduct.description;
+
+    const imagesWereSent =
+      body.images !== undefined;
+
+    const images = imagesWereSent
+      ? getImages(body.images)
+      : [];
+
+    const updatedProduct =
+      await prisma.$transaction(
+        async (tx) => {
+          const product =
+            await tx.product.update({
+              where: {
+                id: productId,
+              },
+
+              data: {
+                name,
+                slug,
+                description,
+
+                price,
+
+                salePrice,
+
+                stock,
+
+                categoryId,
+
+                featured,
+              },
+            });
+
+          if (imagesWereSent) {
+            await tx.productImage.deleteMany({
+              where: {
+                productId,
+              },
+            });
+
+            if (images.length > 0) {
+              await tx.productImage.createMany(
+                {
+                  data: images.map(
+                    (url, index) => ({
+                      productId,
+                      url,
+                      alt: name,
+                      sortOrder: index,
+                    })
+                  ),
+                }
+              );
+            }
+          }
+
+          return tx.product.findUnique({
+            where: {
+              id: productId,
+            },
+
+            include: {
+              category: true,
+
+              images: {
+                orderBy: {
+                  sortOrder: "asc",
+                },
               },
             },
-          },
-        });
-      }
-    );
+          });
+        }
+      );
 
     return NextResponse.json({
       success: true,
-      message: "Product updated successfully",
-      product,
+      message:
+        "Product updated successfully",
+      product: updatedProduct,
     });
   } catch (error) {
     console.error(
@@ -232,16 +418,20 @@ export async function PUT(
   }
 }
 
+// ======================================================
 // DELETE PRODUCT
+// ======================================================
+
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   context: RouteContext
 ) {
   try {
     const { id } = await context.params;
-    const productId = Number(id);
 
-    if (!Number.isInteger(productId)) {
+    const productId = getProductId(id);
+
+    if (!productId) {
       return NextResponse.json(
         {
           success: false,
@@ -276,7 +466,8 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      message: "Product deleted successfully",
+      message:
+        "Product deleted successfully",
     });
   } catch (error) {
     console.error(

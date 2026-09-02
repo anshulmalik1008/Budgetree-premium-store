@@ -5,11 +5,15 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const orderNumber = String(body.orderNumber ?? "")
+    const orderNumber = String(
+      body.orderNumber ?? ""
+    )
       .trim()
       .toUpperCase();
 
-    const email = String(body.email ?? "")
+    const email = String(
+      body.email ?? ""
+    )
       .trim()
       .toLowerCase();
 
@@ -26,8 +30,14 @@ export async function POST(request: NextRequest) {
     const order = await prisma.order.findFirst({
       where: {
         orderNumber,
-        ...(email ? { customerEmail: email } : {}),
+
+        ...(email
+          ? {
+              customerEmail: email,
+            }
+          : {}),
       },
+
       include: {
         items: {
           include: {
@@ -50,7 +60,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Order not found",
+          message:
+            "Order not found. Please check order number and email.",
         },
         { status: 404 }
       );
@@ -58,12 +69,15 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+
       order: {
         id: order.id,
         orderNumber: order.orderNumber,
+
         customerName: order.customerName,
         customerEmail: order.customerEmail,
         customerPhone: order.customerPhone,
+
         shippingAddress: order.shippingAddress,
         city: order.city,
         state: order.state,
@@ -89,7 +103,9 @@ export async function POST(request: NextRequest) {
           quantity: item.quantity,
           price: item.price.toString(),
           total: item.total.toString(),
-          image: item.product?.images?.[0]?.url ?? null,
+
+          image:
+            item.product?.images?.[0]?.url ?? null,
         })),
       },
     });

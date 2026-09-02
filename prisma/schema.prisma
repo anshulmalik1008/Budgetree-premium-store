@@ -36,19 +36,32 @@ model Category {
 
 model Product {
   id          Int     @id @default(autoincrement())
+
   sku         String  @unique
   name        String
   slug        String  @unique
   description String?
 
+  // Pricing
   price     Decimal  @db.Decimal(10, 2)
+  mrp       Decimal? @db.Decimal(10, 2)
   salePrice Decimal? @db.Decimal(10, 2)
 
   stock    Int           @default(0)
   status   ProductStatus @default(ACTIVE)
   featured Boolean       @default(false)
 
+  // Category
   categoryId Int?
+
+  // SiriPay information
+  externalId       String?
+  externalSource   String?
+  brandName        String?
+  subCategoryName  String?
+  primaryCategoryId Int?
+  subCategoryId     Int?
+  hsnCode           String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -61,6 +74,25 @@ model Product {
   @@index([categoryId])
   @@index([status])
   @@index([featured])
+  @@index([externalId])
+  @@index([externalSource])
+}
+
+model ExternalApi {
+  id          Int      @id @default(autoincrement())
+  name        String
+  baseUrl     String?
+  productsUrl String
+  authType    String   @default("NONE")
+  username    String?
+  password    String?
+  apiKey      String?
+  jwtToken    String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active])
 }
 
 model ProductImage {

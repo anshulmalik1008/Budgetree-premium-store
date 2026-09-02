@@ -1,578 +1,484 @@
+// app/admin/page.tsx
+
+"use client";
+
 import Link from "next/link";
-import { getCurrentUserId } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
-  Activity,
-  ArrowRight,
-  BarChart3,
-  Bell,
-  Boxes,
-  ChevronRight,
-  CircleDollarSign,
-  FileSpreadsheet,
   LayoutDashboard,
-  LogOut,
-  Menu,
-  Package,
-  Plus,
-  Settings,
   ShoppingBag,
-  Sparkles,
+  Package,
+  Boxes,
   Users,
+  BarChart3,
+  Settings,
+  FileSpreadsheet,
+  Plus,
+  Bell,
+  LogOut,
+  ChevronRight,
+  Sparkles,
 } from "lucide-react";
 
-export default async function AdminDashboard() {
-  const userId = await getCurrentUserId();
+type DashboardData = {
+  products: number;
+  siripayProducts: number;
+  categories: number;
+  customers: number;
+  orders: number;
+  siripayConnected: boolean;
+};
 
-  if (!userId) {
-    redirect("/admin/login");
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
+export default function AdminPage() {
+  const [data, setData] = useState<DashboardData>({
+    products: 0,
+    siripayProducts: 0,
+    categories: 0,
+    customers: 0,
+    orders: 0,
+    siripayConnected: false,
   });
 
-  if (!user || user.role === "CUSTOMER") {
-    redirect("/admin/login");
-  }
+  const [loading, setLoading] = useState(true);
 
-  const [
-    products,
-    customers,
-    ordersCount,
-    revenueData,
-    recentOrders,
-    pendingOrders,
-    deliveredOrders,
-  ] = await Promise.all([
-    prisma.product.count(),
+  useEffect(() => {
+    const loadDashboard = async () => {
+      try {
+        const [productsRes, categoriesRes] = await Promise.all([
+          fetch("/api/products?limit=100", {
+            cache: "no-store",
+          }),
+          fetch("/api/categories", {
+            cache: "no-store",
+          }),
+        ]);
 
-    prisma.user.count({
-      where: {
-        role: "CUSTOMER",
-      },
-    }),
+        const productsJson = productsRes.ok
+          ? await productsRes.json()
+          : {};
 
-    prisma.order.count(),
+        const categoriesJson = categoriesRes.ok
+          ? await categoriesRes.json()
+          : {};
 
-    prisma.order.aggregate({
-      _sum: {
-        total: true,
-      },
-    }),
+        const products = Array.isArray(productsJson?.products)
+          ? productsJson.products
+          : Array.isArray(productsJson?.data)
+            ? productsJson.data
+            : [];
 
-    prisma.order.findMany({
-      take: 6,
-      orderBy: {
-        createdAt: "desc",
-      },
-      select: {
-        id: true,
-        orderNumber: true,
-        customerName: true,
-        total: true,
-        status: true,
-        createdAt: true,
-      },
-    }),
+        const categories = Array.isArray(
+          categoriesJson?.categories
+        )
+          ? categoriesJson.categories
+          : Array.isArray(categoriesJson?.data)
+            ? categoriesJson.data
+            : [];
 
-    prisma.order.count({
-      where: {
-        status: "PENDING",
-      },
-    }),
+        setData({
+          products: products.length,
+          siripayProducts:
+            productsJson?.source === "SIRIPAY"
+              ? products.length
+              : 0,
+          categories: categories.length,
+          customers: 0,
+          orders: 0,
+          siripayConnected:
+            productsJson?.source === "SIRIPAY" ||
+            productsJson?.siripayConnected === true,
+        });
+      } catch (error) {
+        console.error("Dashboard error:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    prisma.order.count({
-      where: {
-        status: "DELIVERED",
-      },
-    }),
-  ]);
-
-  const revenue = Number(revenueData._sum.total ?? 0);
+    loadDashboard();
+  }, []);
 
   return (
-    <main className="min-h-screen bg-[#080808] text-white">
+    <div className="min-h-screen bg-[#f5f8f1] text-[#17261c]">
+
       <div className="flex min-h-screen">
 
         {/* SIDEBAR */}
-        <aside className="hidden w-[265px] shrink-0 border-r border-white/[0.07] bg-[#0b0b0b] lg:flex lg:flex-col">
 
-          {/* BRAND */}
-          <div className="flex h-[84px] items-center border-b border-white/[0.07] px-6">
+        <aside className="hidden w-[260px] shrink-0 border-r border-[#dfe8dc] bg-white lg:flex lg:flex-col">
+
+          <div className="flex h-[84px] items-center border-b border-[#e4ebe1] px-6">
+
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#f5e6b3] via-[#c8a95a] to-[#8d6b28] text-black shadow-[0_0_30px_rgba(200,169,90,0.18)]">
+
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#08783b] text-white">
                 <Sparkles size={18} />
               </div>
 
               <div>
-                <p className="text-[15px] font-semibold tracking-tight">
+                <p className="text-[15px] font-bold text-[#075d32]">
                   BUDGETREE
                 </p>
 
-                <p className="text-[9px] uppercase tracking-[0.28em] text-[#c8a95a]/60">
+                <p className="text-[9px] uppercase tracking-[0.28em] text-[#78907d]">
                   Premium Store
                 </p>
               </div>
+
             </div>
+
           </div>
 
-          {/* NAVIGATION */}
           <div className="flex-1 px-4 py-6">
-            <p className="mb-3 px-3 text-[9px] uppercase tracking-[0.22em] text-white/25">
+
+            <p className="mb-3 px-3 text-[9px] font-semibold uppercase tracking-[0.22em] text-[#8ca08d]">
               Workspace
             </p>
 
             <nav className="space-y-1">
-              <SidebarItem
+
+              <SideItem
                 href="/admin"
                 icon={<LayoutDashboard size={17} />}
                 label="Dashboard"
                 active
               />
 
-              <SidebarItem
+              <SideItem
                 href="/admin/orders"
                 icon={<ShoppingBag size={17} />}
                 label="Orders"
               />
 
-              <SidebarItem
+              <SideItem
                 href="/admin/products"
                 icon={<Package size={17} />}
                 label="Products"
               />
 
-              <SidebarItem
+              <SideItem
                 href="/admin/products/bulk-import"
                 icon={<FileSpreadsheet size={17} />}
                 label="Bulk Import"
               />
 
-              <SidebarItem
+              <SideItem
                 href="/admin/categories"
                 icon={<Boxes size={17} />}
                 label="Categories"
               />
 
-              <SidebarItem
+              <SideItem
                 href="/admin/customers"
                 icon={<Users size={17} />}
                 label="Customers"
               />
 
-              <SidebarItem
+              <SideItem
                 href="/admin/analytics"
                 icon={<BarChart3 size={17} />}
                 label="Analytics"
               />
+
+              <SideItem
+                href="/admin/external-api"
+                icon={<Settings size={17} />}
+                label="API Settings"
+              />
+
             </nav>
 
-            <p className="mb-3 mt-9 px-3 text-[9px] uppercase tracking-[0.22em] text-white/25">
+            <p className="mb-3 mt-9 px-3 text-[9px] font-semibold uppercase tracking-[0.22em] text-[#8ca08d]">
               System
             </p>
 
-            <SidebarItem
+            <SideItem
               href="/admin/settings"
               icon={<Settings size={17} />}
               label="Settings"
             />
+
           </div>
 
-          {/* USER */}
-          <div className="border-t border-white/[0.07] p-4">
-            <div className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#f5e6b3] to-[#a47d2e] text-xs font-bold text-black">
-                {user.name?.charAt(0)?.toUpperCase() || "A"}
-              </div>
+          <div className="border-t border-[#e4ebe1] p-4">
 
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium">
-                  {user.name}
-                </p>
+            <Link
+              href="/api/admin/logout"
+              className="flex items-center gap-3 rounded-xl bg-[#f6f9f4] p-3 text-xs font-semibold text-[#68786d] hover:text-[#08783b]"
+            >
+              <LogOut size={16} />
+              Logout
+            </Link>
 
-                <p className="truncate text-[10px] text-white/30">
-                  {user.email}
-                </p>
-              </div>
-
-              <form action="/api/admin/logout" method="POST">
-                <button
-                  type="submit"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-white/30 transition hover:bg-white/10 hover:text-white"
-                >
-                  <LogOut size={14} />
-                </button>
-              </form>
-            </div>
           </div>
+
         </aside>
 
-        {/* CONTENT */}
+        {/* MAIN */}
+
         <section className="min-w-0 flex-1">
 
-          {/* TOP BAR */}
-          <header className="flex h-[84px] items-center justify-between border-b border-white/[0.07] bg-[#090909]/90 px-5 backdrop-blur-xl md:px-8">
+          {/* HEADER */}
 
-            <div className="flex items-center gap-3">
-              <button className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 lg:hidden">
-                <Menu size={18} />
-              </button>
+          <header className="flex h-[84px] items-center justify-between border-b border-[#dfe8dc] bg-white px-5 md:px-8">
 
-              <div>
-                <p className="hidden text-[9px] uppercase tracking-[0.25em] text-[#c8a95a]/60 sm:block">
-                  Executive Control
-                </p>
+            <div>
+              <p className="hidden text-[10px] font-semibold uppercase tracking-[0.25em] text-[#78907d] sm:block">
+                EXECUTIVE CONTROL
+              </p>
 
-                <h1 className="text-sm font-semibold sm:text-base">
-                  Dashboard
-                </h1>
-              </div>
+              <h1 className="text-base font-bold">
+                Dashboard
+              </h1>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 transition hover:bg-white/5">
-                <Bell size={17} className="text-white/60" />
+            <div className="flex items-center gap-3">
 
-                {pendingOrders > 0 && (
-                  <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-[#d7b45c] shadow-[0_0_8px_#d7b45c]" />
-                )}
+              <div className="hidden items-center gap-2 rounded-full bg-[#f0f8eb] px-4 py-2 text-xs font-semibold text-[#08783b] sm:flex">
+
+                <span
+                  className={`h-2.5 w-2.5 rounded-full ${
+                    data.siripayConnected
+                      ? "bg-green-500"
+                      : "bg-yellow-500"
+                  }`}
+                />
+
+                SiriPay{" "}
+                {data.siripayConnected
+                  ? "Live"
+                  : "Offline"}
+
+              </div>
+
+              <button
+                type="button"
+                className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-[#dce7dc] bg-white"
+              >
+                <Bell
+                  size={18}
+                  className="text-[#08783b]"
+                />
+
+                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#f0b400]" />
               </button>
 
               <Link
-                href="/admin/products"
-                className="hidden items-center gap-2 rounded-xl bg-gradient-to-r from-[#f1dfaa] via-[#c9a85b] to-[#a47b2e] px-4 py-2.5 text-xs font-semibold text-black shadow-[0_8px_30px_rgba(200,169,90,0.12)] transition hover:brightness-110 sm:flex"
+                href="/admin/products/new"
+                className="hidden items-center gap-2 rounded-xl bg-[#08783b] px-5 py-3 text-sm font-bold text-white sm:flex"
               >
-                <Plus size={15} />
+                <Plus size={17} />
                 Add Product
               </Link>
+
             </div>
+
           </header>
 
-          <div className="mx-auto max-w-[1600px] p-5 md:p-8">
+          <div className="mx-auto max-w-[1500px] p-5 md:p-8">
 
             {/* HERO */}
-            <div className="relative overflow-hidden rounded-[32px] border border-[#c8a95a]/15 bg-gradient-to-br from-[#191713] via-[#101010] to-[#0a0a0a] p-7 shadow-[0_25px_80px_rgba(0,0,0,0.35)] md:p-10">
 
-              <div className="absolute -right-24 -top-28 h-96 w-96 rounded-full bg-[#c8a95a]/10 blur-[100px]" />
+            <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-[#07843f] via-[#0a783a] to-[#2f8138] px-7 py-10 text-white md:px-14">
 
-              <div className="absolute -bottom-32 left-1/3 h-72 w-72 rounded-full bg-[#6f4ea1]/10 blur-[100px]" />
+              <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
 
-              <div className="relative">
+              <div className="relative flex flex-col justify-between gap-8 md:flex-row md:items-center">
 
-                <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#c8a95a]/20 bg-[#c8a95a]/[0.06] px-3 py-1.5 text-[9px] uppercase tracking-[0.2em] text-[#d8bd78]">
-                  <Activity size={11} />
-                  Live Store Command Center
-                </div>
+                <div>
 
-                <div className="flex flex-col justify-between gap-8 md:flex-row md:items-end">
+                  <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/60">
+                    BPS ADMIN PORTAL
+                  </p>
 
-                  <div>
-                    <h2 className="text-3xl font-semibold tracking-[-0.045em] md:text-5xl">
-                      Welcome back,{" "}
-                      <span className="bg-gradient-to-r from-[#f4e4b5] to-[#9e7931] bg-clip-text text-transparent">
-                        {user.name?.split(" ")[0]}
-                      </span>
-                    </h2>
+                  <h2 className="text-4xl font-extrabold tracking-tight md:text-6xl">
+                    Welcome back,{" "}
+                    <span className="text-[#ffd928]">
+                      BPS
+                    </span>
+                  </h2>
 
-                    <p className="mt-4 max-w-2xl text-sm leading-6 text-white/40">
-                      Your premium commerce operations, orders,
-                      products and revenue — all from one place.
-                    </p>
-                  </div>
-
-                  <Link
-                    href="/admin/orders"
-                    className="inline-flex w-fit items-center gap-2 rounded-xl border border-[#c8a95a]/20 bg-[#c8a95a]/[0.06] px-5 py-3 text-xs font-medium text-[#d8bd78] transition hover:bg-[#c8a95a]/10"
-                  >
-                    <ShoppingBag size={15} />
-                    View Orders
-                    <ArrowRight size={14} />
-                  </Link>
+                  <p className="mt-4 max-w-2xl text-sm leading-6 text-white/80">
+                    Manage your catalogue, products,
+                    categories, orders and customers
+                    from one powerful control center.
+                  </p>
 
                 </div>
+
+                <Link
+                  href="/admin/products"
+                  className="flex w-fit items-center gap-3 rounded-2xl bg-[#ffd928] px-7 py-5 text-sm font-extrabold text-[#075d32]"
+                >
+                  <Package size={18} />
+
+                  <span>
+                    Manage
+                    <br />
+                    Catalogue
+                  </span>
+
+                  <ChevronRight size={18} />
+                </Link>
+
               </div>
+
             </div>
 
             {/* STATS */}
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 
-              <PremiumStat
-                title="Products"
-                value={products.toLocaleString("en-IN")}
-                icon={<Package size={18} />}
-                accent="gold"
+            <div className="mt-7 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+
+              <Stat
+                title="Total Products"
+                value={data.products}
+                icon={<Package size={22} />}
+                loading={loading}
               />
 
-              <PremiumStat
+              <Stat
+                title="SiriPay Products"
+                value={data.siripayProducts}
+                icon={<Sparkles size={22} />}
+                yellow
+                loading={loading}
+              />
+
+              <Stat
+                title="Categories"
+                value={data.categories}
+                icon={<Boxes size={22} />}
+                loading={loading}
+              />
+
+              <Stat
                 title="Customers"
-                value={customers.toLocaleString("en-IN")}
-                icon={<Users size={18} />}
-                accent="purple"
-              />
-
-              <PremiumStat
-                title="Orders"
-                value={ordersCount.toLocaleString("en-IN")}
-                icon={<ShoppingBag size={18} />}
-                accent="blue"
-              />
-
-              <PremiumStat
-                title="Total Revenue"
-                value={`₹${revenue.toLocaleString("en-IN", {
-                  maximumFractionDigits: 2,
-                })}`}
-                icon={<CircleDollarSign size={18} />}
-                accent="green"
+                value={data.customers}
+                icon={<Users size={22} />}
+                yellow
+                loading={loading}
               />
 
             </div>
 
-            {/* ANALYTICS + ORDERS */}
-            <div className="mt-5 grid gap-5 xl:grid-cols-[1.45fr_1fr]">
+            {/* MANAGEMENT */}
 
-              {/* REVENUE */}
-              <div className="rounded-[28px] border border-white/[0.08] bg-[#0f0f0f] p-6 md:p-7">
+            <div className="mt-8">
 
-                <div className="flex items-start justify-between">
+              <div className="mb-5">
 
-                  <div>
-                    <p className="text-[9px] uppercase tracking-[0.2em] text-[#c8a95a]/50">
-                      Financial Overview
-                    </p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#8ca08d]">
+                  Quick Access
+                </p>
 
-                    <h3 className="mt-2 text-lg font-semibold">
-                      Revenue
-                    </h3>
+                <h2 className="mt-1 text-xl font-extrabold">
+                  Store Management
+                </h2>
 
-                    <p className="mt-1 text-xs text-white/25">
-                      Lifetime revenue from orders
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border border-[#c8a95a]/15 bg-[#c8a95a]/[0.05] px-3 py-2">
-                    <CircleDollarSign
-                      size={16}
-                      className="text-[#c8a95a]"
-                    />
-                  </div>
-
-                </div>
-
-                <div className="mt-8 rounded-2xl border border-white/[0.05] bg-[#0a0a0a] p-6">
-
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/25">
-                    Total Revenue
-                  </p>
-
-                  <p className="mt-2 text-4xl font-semibold tracking-[-0.04em]">
-                    ₹
-                    {revenue.toLocaleString("en-IN", {
-                      maximumFractionDigits: 2,
-                    })}
-                  </p>
-
-                  <div className="mt-6 h-2 overflow-hidden rounded-full bg-white/[0.05]">
-                    <div className="h-full w-[72%] rounded-full bg-gradient-to-r from-[#8d6b28] via-[#d7b45c] to-[#f2dfa8]" />
-                  </div>
-
-                  <div className="mt-4 flex justify-between text-[10px] text-white/25">
-                    <span>Store Revenue</span>
-                    <span>Live from PostgreSQL</span>
-                  </div>
-
-                </div>
-
-                {/* MINI METRICS */}
-                <div className="mt-4 grid grid-cols-2 gap-3">
-
-                  <MiniMetric
-                    title="Pending"
-                    value={pendingOrders}
-                  />
-
-                  <MiniMetric
-                    title="Delivered"
-                    value={deliveredOrders}
-                  />
-
-                </div>
               </div>
 
-              {/* RECENT ORDERS */}
-              <div className="rounded-[28px] border border-white/[0.08] bg-[#0f0f0f] p-6 md:p-7">
+              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
 
-                <div className="flex items-start justify-between">
+                <Action
+                  href="/admin/products"
+                  icon={<Package size={20} />}
+                  title="Products"
+                  text="Manage complete catalogue"
+                />
 
-                  <div>
-                    <p className="text-[9px] uppercase tracking-[0.2em] text-[#c8a95a]/50">
-                      Commerce
-                    </p>
+                <Action
+                  href="/admin/categories"
+                  icon={<Boxes size={20} />}
+                  title="Categories"
+                  text="Manage all categories"
+                />
 
-                    <h3 className="mt-2 text-lg font-semibold">
-                      Recent Orders
-                    </h3>
+                <Action
+                  href="/admin/orders"
+                  icon={<ShoppingBag size={20} />}
+                  title="Orders"
+                  text="Manage customer orders"
+                />
+
+                <Action
+                  href="/admin/customers"
+                  icon={<Users size={20} />}
+                  title="Customers"
+                  text="Manage customer accounts"
+                />
+
+              </div>
+
+            </div>
+
+            {/* SIRIPAY */}
+
+            <div className="mt-7 rounded-[26px] border border-[#dce7d9] bg-white p-6">
+
+              <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
+
+                <div className="flex items-center gap-4">
+
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#edf8e8] text-[#08783b]">
+                    <Sparkles size={20} />
                   </div>
 
+                  <div>
+
+                    <h3 className="text-sm font-bold">
+                      SiriPay Catalogue
+                    </h3>
+
+                    <p className="mt-1 text-xs text-[#7c8c80]">
+                      Live external product catalogue
+                    </p>
+
+                  </div>
+
+                </div>
+
+                <div className="flex items-center gap-3">
+
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full ${
+                      data.siripayConnected
+                        ? "bg-green-500"
+                        : "bg-yellow-500"
+                    }`}
+                  />
+
+                  <span className="text-xs font-bold text-[#08783b]">
+                    {data.siripayConnected
+                      ? "Connected"
+                      : "Not Connected"}
+                  </span>
+
                   <Link
-                    href="/admin/orders"
-                    className="text-[10px] text-white/30 transition hover:text-[#d7b45c]"
+                    href="/admin/external-api"
+                    className="rounded-xl border border-[#dce7d9] px-4 py-2 text-xs font-bold text-[#53665a] hover:border-[#08783b] hover:text-[#08783b]"
                   >
-                    View all
+                    API Settings
                   </Link>
 
                 </div>
 
-                <div className="mt-5 space-y-2">
-
-                  {recentOrders.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-white/[0.08] px-5 py-10 text-center">
-                      <ShoppingBag
-                        size={28}
-                        className="mx-auto text-white/10"
-                      />
-
-                      <p className="mt-3 text-xs text-white/30">
-                        No orders yet
-                      </p>
-                    </div>
-                  ) : (
-                    recentOrders.map((order) => (
-                      <Link
-                        key={order.id}
-                        href={`/admin/orders/${order.id}`}
-                        className="group flex items-center gap-3 rounded-2xl border border-white/[0.045] bg-white/[0.02] p-3 transition hover:border-[#c8a95a]/20 hover:bg-[#c8a95a]/[0.025]"
-                      >
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.05] text-[#c8a95a]">
-                          <ShoppingBag size={15} />
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-medium">
-                            {order.customerName}
-                          </p>
-
-                          <p className="mt-1 truncate text-[9px] text-white/25">
-                            {order.orderNumber}
-                          </p>
-                        </div>
-
-                        <div className="text-right">
-                          <p className="text-xs font-medium">
-                            ₹
-                            {Number(order.total).toLocaleString(
-                              "en-IN"
-                            )}
-                          </p>
-
-                          <OrderStatus status={order.status} />
-                        </div>
-
-                        <ChevronRight
-                          size={13}
-                          className="text-white/15 transition group-hover:translate-x-1 group-hover:text-[#c8a95a]"
-                        />
-                      </Link>
-                    ))
-                  )}
-
-                </div>
-              </div>
-            </div>
-
-            {/* LOWER PANELS */}
-            <div className="mt-5 grid gap-5 lg:grid-cols-3">
-
-              <DashboardPanel
-                title="Product Management"
-                subtitle="Manage your complete catalogue"
-                icon={<Package size={17} />}
-              >
-                <PanelLink
-                  href="/admin/products"
-                  text="Manage Products"
-                />
-
-                <PanelLink
-                  href="/admin/products/bulk-import"
-                  text="Bulk Catalogue Import"
-                />
-              </DashboardPanel>
-
-              <DashboardPanel
-                title="Customer Management"
-                subtitle="Customer database overview"
-                icon={<Users size={17} />}
-              >
-                <div className="rounded-2xl border border-white/[0.05] bg-white/[0.02] p-4">
-                  <p className="text-[9px] uppercase tracking-[0.18em] text-white/25">
-                    Total Customers
-                  </p>
-
-                  <p className="mt-2 text-2xl font-semibold">
-                    {customers.toLocaleString("en-IN")}
-                  </p>
-                </div>
-
-                <PanelLink
-                  href="/admin/customers"
-                  text="Open Customers"
-                />
-              </DashboardPanel>
-
-              <DashboardPanel
-                title="System Status"
-                subtitle="Core services"
-                icon={<Activity size={17} />}
-              >
-                <SystemRow
-                  name="PostgreSQL"
-                  status="Connected"
-                />
-
-                <SystemRow
-                  name="Prisma"
-                  status="Connected"
-                />
-
-                <SystemRow
-                  name="Orders API"
-                  status="Operational"
-                />
-
-                <SystemRow
-                  name="Bulk Import"
-                  status="Operational"
-                />
-              </DashboardPanel>
-
-            </div>
-
-            {/* FOOTER */}
-            <div className="mt-5 flex flex-col justify-between gap-3 rounded-2xl border border-white/[0.06] bg-[#0c0c0c] px-5 py-4 text-[10px] text-white/25 sm:flex-row sm:items-center">
-              <div className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#c8a95a] shadow-[0_0_8px_#c8a95a]" />
-                Budgetree Premium Admin
               </div>
 
-              <span>
-                {ordersCount} orders · ₹
-                {revenue.toLocaleString("en-IN")} revenue
-              </span>
             </div>
 
           </div>
+
         </section>
+
       </div>
-    </main>
+
+    </div>
   );
 }
 
 /* SIDEBAR */
 
-function SidebarItem({
+function SideItem({
   href,
   icon,
   label,
@@ -586,10 +492,10 @@ function SidebarItem({
   return (
     <Link
       href={href}
-      className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs transition ${
+      className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-xs font-semibold transition ${
         active
-          ? "bg-gradient-to-r from-[#f1dfaa] to-[#b48a39] text-black shadow-[0_8px_25px_rgba(200,169,90,0.12)]"
-          : "text-white/45 hover:bg-white/[0.05] hover:text-white"
+          ? "bg-[#ffd928] text-[#075d32]"
+          : "text-[#6c7d70] hover:bg-[#f3f8f1] hover:text-[#08783b]"
       }`}
     >
       {icon}
@@ -601,7 +507,7 @@ function SidebarItem({
       {!active && (
         <ChevronRight
           size={13}
-          className="opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-50"
+          className="opacity-0 group-hover:opacity-50"
         />
       )}
     </Link>
@@ -610,178 +516,96 @@ function SidebarItem({
 
 /* STAT */
 
-function PremiumStat({
+function Stat({
   title,
   value,
   icon,
-  accent,
-}: {
-  title: string;
-  value: string;
-  icon: React.ReactNode;
-  accent: "gold" | "purple" | "blue" | "green";
-}) {
-  const accentClasses = {
-    gold:
-      "from-[#f3df9d]/20 to-[#8e6b2b]/5 text-[#d8bd78]",
-    purple:
-      "from-[#b695dc]/20 to-[#67408f]/5 text-[#b695dc]",
-    blue:
-      "from-[#8eb9df]/20 to-[#3f6485]/5 text-[#8eb9df]",
-    green:
-      "from-[#9bc9aa]/20 to-[#477455]/5 text-[#9bc9aa]",
-  };
-
-  return (
-    <div className="group relative overflow-hidden rounded-[25px] border border-white/[0.08] bg-[#0f0f0f] p-5 transition hover:-translate-y-1 hover:border-white/[0.14]">
-      <div
-        className={`absolute right-0 top-0 h-32 w-32 rounded-full bg-gradient-to-br blur-3xl ${accentClasses[accent]}`}
-      />
-
-      <div className="relative">
-        <div className="flex items-start justify-between">
-          <div
-            className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${accentClasses[accent]}`}
-          >
-            {icon}
-          </div>
-
-          <span className="text-[8px] uppercase tracking-[0.15em] text-white/20">
-            Live
-          </span>
-        </div>
-
-        <p className="mt-6 text-[10px] text-white/35">
-          {title}
-        </p>
-
-        <p className="mt-1 truncate text-2xl font-semibold tracking-[-0.04em]">
-          {value}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/* MINI */
-
-function MiniMetric({
-  title,
-  value,
+  yellow = false,
+  loading = false,
 }: {
   title: string;
   value: number;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/[0.05] bg-white/[0.02] p-4">
-      <p className="text-[9px] uppercase tracking-[0.15em] text-white/25">
-        {title}
-      </p>
-
-      <p className="mt-2 text-xl font-semibold">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-/* STATUS */
-
-function OrderStatus({
-  status,
-}: {
-  status: string;
-}) {
-  const label = status.replaceAll("_", " ");
-
-  return (
-    <span className="mt-1 inline-flex rounded-full border border-[#c8a95a]/15 bg-[#c8a95a]/[0.05] px-2 py-0.5 text-[8px] uppercase tracking-wider text-[#c8a95a]">
-      {label}
-    </span>
-  );
-}
-
-/* PANEL */
-
-function DashboardPanel({
-  title,
-  subtitle,
-  icon,
-  children,
-}: {
-  title: string;
-  subtitle: string;
   icon: React.ReactNode;
-  children: React.ReactNode;
+  yellow?: boolean;
+  loading?: boolean;
 }) {
   return (
-    <div className="rounded-[26px] border border-white/[0.08] bg-[#0f0f0f] p-6">
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#c8a95a]/[0.06] text-[#c8a95a]">
+    <div className="rounded-[26px] border border-[#dce7d9] bg-white p-7 shadow-sm">
+
+      <div className="flex items-start justify-between">
+
+        <div
+          className={`flex h-14 w-14 items-center justify-center rounded-2xl ${
+            yellow
+              ? "bg-[#fff7c9]"
+              : "bg-[#edf8e8]"
+          } text-[#08783b]`}
+        >
           {icon}
         </div>
 
-        <div>
-          <h3 className="text-sm font-semibold">
-            {title}
-          </h3>
+        <span className="rounded-full bg-[#f0f8eb] px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-[#08783b]">
+          Live
+        </span>
 
-          <p className="mt-1 text-[10px] text-white/25">
-            {subtitle}
-          </p>
-        </div>
       </div>
 
-      <div className="mt-5 space-y-2">
-        {children}
-      </div>
+      <p className="mt-8 text-sm text-[#738578]">
+        {title}
+      </p>
+
+      {loading ? (
+        <div className="mt-3 h-10 w-24 animate-pulse rounded-lg bg-[#edf2ea]" />
+      ) : (
+        <p className="mt-1 text-4xl font-extrabold">
+          {value.toLocaleString("en-IN")}
+        </p>
+      )}
+
     </div>
   );
 }
 
-/* PANEL LINK */
+/* ACTION */
 
-function PanelLink({
+function Action({
   href,
+  icon,
+  title,
   text,
 }: {
   href: string;
+  icon: React.ReactNode;
+  title: string;
   text: string;
 }) {
   return (
     <Link
       href={href}
-      className="group flex items-center justify-between rounded-xl border border-white/[0.05] bg-white/[0.02] px-4 py-3 text-[11px] text-white/50 transition hover:border-[#c8a95a]/20 hover:bg-[#c8a95a]/[0.04] hover:text-white"
+      className="group rounded-[25px] border border-[#dce7d9] bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
     >
-      {text}
 
-      <ArrowRight
-        size={13}
-        className="text-white/20 transition group-hover:translate-x-1 group-hover:text-[#c8a95a]"
-      />
+      <div className="flex items-center justify-between">
+
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#edf8e8] text-[#08783b]">
+          {icon}
+        </div>
+
+        <ChevronRight
+          size={17}
+          className="text-[#a4b1a7] transition group-hover:translate-x-1 group-hover:text-[#08783b]"
+        />
+
+      </div>
+
+      <h3 className="mt-5 text-base font-bold">
+        {title}
+      </h3>
+
+      <p className="mt-2 text-xs text-[#7b8b80]">
+        {text}
+      </p>
+
     </Link>
-  );
-}
-
-/* SYSTEM */
-
-function SystemRow({
-  name,
-  status,
-}: {
-  name: string;
-  status: string;
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-4 py-3">
-      <span className="text-[11px] text-white/40">
-        {name}
-      </span>
-
-      <span className="flex items-center gap-1.5 text-[9px] text-[#9bc9aa]">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#9bc9aa] shadow-[0_0_7px_#9bc9aa]" />
-        {status}
-      </span>
-    </div>
   );
 }

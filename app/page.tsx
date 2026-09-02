@@ -3,637 +3,1637 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowRight,
-  ChevronRight,
-  Gift,
-  Heart,
   Search,
-  ShoppingBag,
-  Sparkles,
-  Star,
-  Truck,
+  ShoppingCart,
+  Heart,
   User,
+  MapPin,
+  ChevronLeft,
+  ChevronRight,
   ShieldCheck,
+  Truck,
+  RotateCcw,
+  Headphones,
+  Menu,
+  Gift,
+  Star,
+  ArrowRight,
+  Tag,
 } from "lucide-react";
 
+/* =========================================================
+   TYPES
+========================================================= */
+
 type Product = {
-  id: number;
-  sku: string;
-  name: string;
-  slug: string;
+  id: number | string;
+  externalId?: number | string;
+
+  sku?: string;
+  name?: string;
+  slug?: string;
+
   description?: string | null;
-  price: string | number;
-  salePrice?: string | number | null;
-  stock: number;
-  status: string;
-  featured: boolean;
 
-  category?: {
-    id: number;
-    name: string;
-    slug: string;
-  } | null;
+  price?: number | string | null;
+  salePrice?: number | string | null;
+  mrp?: number | string | null;
 
-  images?: {
-    id: number;
-    url: string;
-    alt?: string | null;
-    sortOrder?: number;
-  }[];
+  stock?: number;
+  qty?: number;
+
+  status?: string;
+  featured?: boolean;
+
+  categoryId?: number | string | null;
+  categoryName?: string;
+
+  brandName?: string;
+
+  image?: string | null;
+  images?: string[];
+  gallery?: string[];
+
+  externalData?: unknown;
 };
 
 type Category = {
-  id: number;
-  name: string;
-  slug: string;
+  id?: number | string;
+  name?: string;
+  slug?: string;
   image?: string | null;
-  description?: string | null;
 };
 
-export default function Home() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [heroIndex, setHeroIndex] = useState(0);
+/* =========================================================
+   BANNERS
+========================================================= */
+
+const banners = [
+  {
+    id: 1,
+    title: "Premium Gifts.",
+    highlight: "Delivered Fast.",
+    subtitle:
+      "Discover premium products, gifts & lifestyle essentials at trusted prices.",
+    offer: "UP TO 30% OFF",
+    button: "SHOP NOW",
+    link: "/shop",
+  },
+  {
+    id: 2,
+    title: "Big Savings.",
+    highlight: "Better Choices.",
+    subtitle:
+      "Explore our latest collection with exclusive offers and genuine products.",
+    offer: "EXTRA 10% OFF",
+    button: "EXPLORE DEALS",
+    link: "/shop",
+  },
+  {
+    id: 3,
+    title: "Gift More.",
+    highlight: "Spend Smarter.",
+    subtitle:
+      "Premium merchandise for every occasion, delivered right to your door.",
+    offer: "SPECIAL DEALS",
+    button: "VIEW COLLECTION",
+    link: "/shop",
+  },
+];
+
+const fallbackCategories: Category[] = [
+  {
+    id: "fallback-1",
+    name: "Home & Kitchen",
+  },
+  {
+    id: "fallback-2",
+    name: "Electronics",
+  },
+  {
+    id: "fallback-3",
+    name: "Fashion",
+  },
+  {
+    id: "fallback-4",
+    name: "Beauty & Grooming",
+  },
+  {
+    id: "fallback-5",
+    name: "Personal Care",
+  },
+  {
+    id: "fallback-6",
+    name: "Gifts & Combos",
+  },
+];
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function formatPrice(
+  value?: number | string | null
+) {
+  const numericValue = Number(value);
+
+  if (
+    !Number.isFinite(numericValue) ||
+    numericValue <= 0
+  ) {
+    return "Price unavailable";
+  }
+
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(numericValue);
+}
+
+
+
+function getProductImage(
+  product: Product
+): string {
+  if (
+    typeof product.image ===  "string" &&
+    product.image.trim()
+  ) {
+    return product.image.trim();
+  }
+
+  if (
+    Array.isArray(product.images)
+  ) {
+    const image = product.images.find(
+      (item) =>
+        typeof item === "string" &&
+        item.trim().length > 0
+    );
+
+    if (image) {
+      return image.trim();
+    }
+  }
+
+  if (
+    Array.isArray(product.gallery)
+  ) {
+    const image = product.gallery.find(
+      (item) =>
+        typeof item === "string" &&
+        item.trim().length > 0
+    );
+
+    if (image) {
+      return image.trim();
+    }
+  }
+
+  return "";
+}
+
+/* =========================================================
+   GET ALL PRODUCT IMAGES
+========================================================= */
+
+function getProductImages(
+  product: Product
+): string[] {
+  const result: string[] = [];
+
+  if (
+    typeof product.image === "string" &&
+    product.image.trim()
+  ) {
+    result.push(product.image.trim());
+  }
+
+  if (Array.isArray(product.images)) {
+    result.push(
+      ...product.images.filter(
+        (item) =>
+          typeof item === "string" &&
+          item.trim().length > 0
+      )
+    );
+  }
+
+  if (Array.isArray(product.gallery)) {
+    result.push(
+      ...product.gallery.filter(
+        (item) =>
+          typeof item === "string" &&
+          item.trim().length > 0
+      )
+    );
+  }
+
+  return Array.from(
+    new Set(result)
+  );
+}
+
+/* =========================================================
+   CATEGORY HELPERS
+========================================================= */
+
+function getCategoryName(
+  category: Category
+) {
+  return (
+    category.name?.trim() ||
+    "Category"
+  );
+}
+
+function getCategoryId(
+  category: Category,
+  index: number
+) {
+  return String(
+    category.id ??
+      category.slug ??
+      `category-${index}`
+  );
+}
+
+/* =========================================================
+   NORMALIZE API PRODUCTS
+========================================================= */
+
+function normalizeProducts(
+  data: unknown
+): Product[] {
+  if (!data || typeof data !== "object") {
+    return [];
+  }
+
+  const root =
+    data as Record<string, unknown>;
+
+  const rawProducts =
+    Array.isArray(root.products)
+      ? root.products
+      : [];
+
+  return rawProducts
+    .filter(
+      (item): item is Record<string, unknown> =>
+        Boolean(
+          item &&
+            typeof item === "object"
+        )
+    )
+    .map((item, index) => {
+      const id =
+        item.id ??
+        item.externalId ??
+        item.product_id ??
+        `product-${index}`;
+
+      const name =
+        item.name ??
+        item.product_name ??
+        item.title ??
+        "Unnamed Product";
+
+      const price =
+        item.price ??
+        item.product_price ??
+        0;
+
+      const mrp =
+        item.mrp ??
+        item.product_mrp ??
+        price;
+
+      const categoryName =
+        item.categoryName ??
+        item.category_name ??
+        (
+          item.category &&
+          typeof item.category ===
+            "object" &&
+          "name" in item.category
+            ? (
+                item.category as {
+                  name?: string;
+                }
+              ).name
+            : "Uncategorized"
+        );
+
+      const categoryId =
+        item.categoryId ??
+        item.category_id ??
+        null;
+
+      const brandName =
+        item.brandName ??
+        item.brand_name ??
+        "";
+
+      const image =
+        typeof item.image ===
+          "string"
+          ? item.image
+          : null;
+
+      const images =
+        Array.isArray(item.images)
+          ? item.images.filter(
+              (image): image is string =>
+                typeof image ===
+                  "string" &&
+                image.trim().length > 0
+            )
+          : [];
+
+      const gallery =
+        Array.isArray(item.gallery)
+          ? item.gallery.filter(
+              (image): image is string =>
+                typeof image ===
+                  "string" &&
+                image.trim().length > 0
+            )
+          : [];
+
+      return {
+        id:
+          id as
+            | number
+            | string,
+
+        externalId:
+          item.externalId as
+            | number
+            | string
+            | undefined,
+
+        sku:
+          typeof item.sku ===
+          "string"
+            ? item.sku
+            : undefined,
+
+        name:
+          String(name),
+
+        slug:
+          typeof item.slug ===
+          "string"
+            ? item.slug
+            : undefined,
+
+        description:
+          typeof item.description ===
+          "string"
+            ? item.description
+            : null,
+
+        price:
+          price as
+            | number
+            | string,
+
+        salePrice:
+          item.salePrice as
+            | number
+            | string
+            | null
+            | undefined,
+
+        mrp:
+          mrp as
+            | number
+            | string,
+
+        stock:
+          Number(item.stock ?? 0),
+
+        qty:
+          Number(item.qty ?? 0),
+
+        status:
+          typeof item.status ===
+          "string"
+            ? item.status
+            : undefined,
+
+        featured:
+          Boolean(item.featured),
+
+        categoryId:
+          categoryId as
+            | number
+            | string
+            | null,
+
+        categoryName:
+          String(
+            categoryName ??
+              "Uncategorized"
+          ),
+
+        brandName:
+          String(
+            brandName ?? ""
+          ),
+
+        image,
+
+        images,
+
+        gallery,
+
+        externalData:
+          item.externalData,
+      };
+    });
+}
+
+/* =========================================================
+   NORMALIZE CATEGORIES
+========================================================= */
+
+function normalizeCategories(
+  data: unknown
+): Category[] {
+  if (!data || typeof data !== "object") {
+    return [];
+  }
+
+  const root =
+    data as Record<string, unknown>;
+
+  const rawCategories =
+    Array.isArray(root.categories)
+      ? root.categories
+      : [];
+
+  return rawCategories
+    .filter(
+      (item): item is Record<string, unknown> =>
+        Boolean(
+          item &&
+            typeof item === "object"
+        )
+    )
+    .map((item, index) => ({
+      id:
+        (item.id ??
+          item.category_id ??
+          `category-${index}`) as
+          | number
+          | string,
+
+      name:
+        String(
+          item.name ??
+            item.category_name ??
+            item.categoryName ??
+            item.title ??
+            "Category"
+        ),
+
+      slug:
+        typeof item.slug ===
+        "string"
+          ? item.slug
+          : undefined,
+
+      image:
+        typeof item.image ===
+        "string"
+          ? item.image
+          : null,
+    }));
+}
+
+/* =========================================================
+   HOME PAGE
+========================================================= */
+
+export default function HomePage() {
+  const [products, setProducts] =
+    useState<Product[]>([]);
+
+  const [categories, setCategories] =
+    useState<Category[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [currentBanner, setCurrentBanner] =
+    useState(0);
+
+  const [search, setSearch] =
+    useState("");
+
+  const [cartCount, setCartCount] =
+    useState(0);
+
+  /* =======================================================
+     FETCH PRODUCTS + CATEGORIES
+  ======================================================= */
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadData() {
       try {
-        const [productsRes, categoriesRes] = await Promise.all([
-          fetch("/api/products", {
-            cache: "no-store",
-          }),
-          fetch("/api/categories", {
-            cache: "no-store",
-          }),
-        ]);
+        setLoading(true);
 
-        if (productsRes.ok) {
-          const data = await productsRes.json();
-          setProducts(data.products ?? []);
+        const response =
+          await fetch(
+            "/api/products",
+            {
+              cache: "no-store",
+            }
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            `Products API failed: ${response.status}`
+          );
         }
 
-        if (categoriesRes.ok) {
-          const data = await categoriesRes.json();
-          setCategories(data.categories ?? []);
+        const data =
+          await response.json();
+
+        console.log(
+          "HOME /api/products RESPONSE:",
+          data
+        );
+
+        const fetchedProducts =
+          normalizeProducts(data);
+
+        const fetchedCategories =
+          normalizeCategories(data);
+
+        console.log(
+          "HOME PRODUCTS COUNT:",
+          fetchedProducts.length
+        );
+
+        console.log(
+          "HOME CATEGORIES COUNT:",
+          fetchedCategories.length
+        );
+
+        console.log(
+          "HOME FIRST PRODUCT:",
+          fetchedProducts[0]
+        );
+
+        console.log(
+          "HOME FIRST PRODUCT IMAGE:",
+          fetchedProducts[0]
+            ? getProductImage(
+                fetchedProducts[0]
+              )
+            : ""
+        );
+
+        if (!cancelled) {
+          setProducts(
+            fetchedProducts
+          );
+
+          setCategories(
+            fetchedCategories
+          );
         }
       } catch (error) {
-        console.error("HOME DATA ERROR:", error);
+        console.error(
+          "HOME FETCH ERROR:",
+          error
+        );
+
+        if (!cancelled) {
+          setProducts([]);
+          setCategories([]);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
     loadData();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const activeProducts = useMemo(() => {
-    return products.filter(
-      (product) =>
-        product.status === "ACTIVE" &&
-        product.stock > 0
-    );
-  }, [products]);
-
-  const featuredProducts = useMemo(() => {
-    const featured = activeProducts.filter(
-      (product) => product.featured
-    );
-
-    return featured.length > 0
-      ? featured
-      : activeProducts;
-  }, [activeProducts]);
+  /* =======================================================
+     CART COUNT
+  ======================================================= */
 
   useEffect(() => {
-    if (featuredProducts.length <= 1) return;
+    function readCart() {
+      try {
+        const raw =
+          localStorage.getItem(
+            "cart"
+          );
 
-    const timer = setInterval(() => {
-      setHeroIndex((current) =>
-        (current + 1) % featuredProducts.length
+        if (!raw) {
+          setCartCount(0);
+          return;
+        }
+
+        const cart =
+          JSON.parse(raw);
+
+        if (Array.isArray(cart)) {
+          setCartCount(
+            cart.reduce(
+              (
+                total,
+                item
+              ) =>
+                total +
+                Number(
+                  item?.quantity ??
+                    1
+                ),
+              0
+            )
+          );
+        } else {
+          setCartCount(0);
+        }
+      } catch {
+        setCartCount(0);
+      }
+    }
+
+    readCart();
+
+    window.addEventListener(
+      "cart-updated",
+      readCart
+    );
+
+    return () => {
+      window.removeEventListener(
+        "cart-updated",
+        readCart
       );
-    }, 4500);
+    };
+  }, []);
 
-    return () => clearInterval(timer);
-  }, [featuredProducts]);
+  /* =======================================================
+     AUTO BANNER
+  ======================================================= */
 
-  const heroProduct =
-    featuredProducts[heroIndex] ||
-    featuredProducts[0];
+  useEffect(() => {
+    const timer =
+      setInterval(() => {
+        setCurrentBanner(
+          (prev) =>
+            (prev + 1) %
+            banners.length
+        );
+      }, 4500);
 
-  const bestSellers = activeProducts.slice(0, 4);
+    return () =>
+      clearInterval(timer);
+  }, []);
+
+  /* =======================================================
+     SEARCH
+  ======================================================= */
+
+  const filteredProducts =
+    useMemo(() => {
+      const query =
+        search.trim().toLowerCase();
+
+      if (!query) {
+        return products;
+      }
+
+      return products.filter(
+        (product) =>
+          product.name
+            ?.toLowerCase()
+            .includes(query) ||
+          product.brandName
+            ?.toLowerCase()
+            .includes(query) ||
+          product.categoryName
+            ?.toLowerCase()
+            .includes(query)
+      );
+    }, [products, search]);
+
+  /* =======================================================
+     ADD TO CART
+  ======================================================= */
+
+  function addToCart(
+    product: Product
+  ) {
+    try {
+      const raw =
+        localStorage.getItem(
+          "cart"
+        );
+
+      const cart =
+        raw
+          ? JSON.parse(raw)
+          : [];
+
+      if (!Array.isArray(cart)) {
+        return;
+      }
+
+      const existingIndex =
+        cart.findIndex(
+          (item: Product) =>
+            String(
+              item.id
+            ) ===
+            String(
+              product.id
+            )
+        );
+
+      if (
+        existingIndex >= 0
+      ) {
+        cart[
+          existingIndex
+        ].quantity =
+          Number(
+            cart[
+              existingIndex
+            ].quantity ?? 1
+          ) + 1;
+      } else {
+        cart.push({
+          ...product,
+          quantity: 1,
+        });
+      }
+
+      localStorage.setItem(
+        "cart",
+        JSON.stringify(cart)
+      );
+
+      setCartCount(
+        cart.reduce(
+          (
+            total,
+            item
+          ) =>
+            total +
+            Number(
+              item?.quantity ??
+                1
+            ),
+          0
+        )
+      );
+
+      window.dispatchEvent(
+        new Event(
+          "cart-updated"
+        )
+      );
+    } catch (error) {
+      console.error(
+        "CART ERROR:",
+        error
+      );
+    }
+  }
+
+  const banner =
+    banners[currentBanner];
+
+  const visibleCategories =
+    categories.length
+      ? categories.slice(0, 8)
+      : fallbackCategories;
+
+  /* =========================================================
+     RENDER
+  ========================================================= */
 
   return (
-    <main className="min-h-screen bg-[#fffdf9] text-[#252525]">
+    <main className="min-h-screen bg-[#fffdf5] text-[#101828]">
 
-      {/* TOP BAR */}
+      {/* =====================================================
+          TOP TRUST BAR
+      ===================================================== */}
 
-      <div className="bg-[#f7eee4] px-4 py-2 text-center text-[10px] font-medium tracking-[0.12em] text-[#6c5543]">
-        FREE SHIPPING ON ORDERS ABOVE ₹999
+      <div className="border-b border-yellow-300 bg-[#ffd928]">
+        <div className="mx-auto max-w-[1500px] px-4 py-2">
+          <div className="flex items-center justify-center gap-5 overflow-hidden whitespace-nowrap text-[12px] font-semibold text-[#123b25] md:gap-10">
+
+            <span className="flex items-center gap-2">
+              <ShieldCheck size={16} />
+              100% Genuine Products
+            </span>
+
+            <span className="hidden md:block">
+              |
+            </span>
+
+            <span className="flex items-center gap-2">
+              <ShieldCheck size={16} />
+              Secure Payments
+            </span>
+
+            <span className="hidden md:block">
+              |
+            </span>
+
+            <span className="flex items-center gap-2">
+              <Truck size={16} />
+              Fast & Reliable Delivery
+            </span>
+
+            <span className="hidden md:block">
+              |
+            </span>
+
+            <span className="flex items-center gap-2">
+              <RotateCcw size={16} />
+              Easy Returns
+            </span>
+
+            <span className="hidden lg:flex items-center gap-2">
+              <Headphones size={16} />
+              24x7 Customer Support
+            </span>
+
+          </div>
+        </div>
       </div>
 
-      {/* NAVBAR */}
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
 
-      <header className="sticky top-0 z-50 border-b border-[#eee5dc] bg-white/95 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
 
-        <div className="mx-auto flex h-[74px] max-w-[1400px] items-center justify-between px-5 md:px-8">
+        <div className="mx-auto max-w-[1500px] px-4">
 
-          {/* LOGO */}
+          <div className="flex h-[78px] items-center gap-4">
 
-          <Link href="/" className="flex flex-col">
-            <span className="text-[25px] font-semibold tracking-[-0.06em] text-[#252525]">
-              BPS
-            </span>
-
-            <span className="text-[7px] uppercase tracking-[0.3em] text-[#a18b78]">
-              Budgetree Premium Store
-            </span>
-          </Link>
-
-          {/* NAV */}
-
-          <nav className="hidden items-center gap-8 text-[12px] lg:flex">
+            {/* LOGO */}
 
             <Link
               href="/"
-              className="font-medium text-[#8c5b3f]"
+              className="flex min-w-fit items-center gap-2"
             >
-              Home
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0c6b38] text-white shadow-sm">
+                <Gift size={25} />
+              </div>
+
+              <div className="leading-none">
+                <div className="text-[25px] font-black tracking-tight text-[#146b3a]">
+                  budgetree
+                </div>
+
+                <div className="mt-1 text-[9px] font-bold tracking-[2px] text-gray-500">
+                  PREMIUM STORE
+                </div>
+              </div>
             </Link>
 
-            <Link
-              href="/shop"
-              className="text-[#555] transition hover:text-[#8c5b3f]"
+            {/* LOCATION */}
+
+            <button
+              type="button"
+              className="hidden h-12 min-w-[145px] items-center gap-2 rounded-xl border border-gray-200 px-4 text-left md:flex"
             >
-              Shop
-            </Link>
+              <MapPin
+                size={21}
+                className="text-[#0b7139]"
+              />
 
-            <Link
-              href="/shop?sort=featured"
-              className="text-[#555] transition hover:text-[#8c5b3f]"
-            >
-              Collections
-            </Link>
+              <div>
+                <p className="text-[10px] text-gray-500">
+                  Deliver to
+                </p>
 
-            <Link
-              href="/shop?category=corporate"
-              className="text-[#555] transition hover:text-[#8c5b3f]"
-            >
-              Corporate
-            </Link>
+                <p className="text-sm font-bold">
+                  New Delhi
+                </p>
+              </div>
 
-            <Link
-              href="/track-order"
-              className="text-[#555] transition hover:text-[#8c5b3f]"
-            >
-              Track Order
-            </Link>
+              <ChevronRight
+                size={17}
+                className="ml-auto rotate-90 text-gray-500"
+              />
+            </button>
 
-          </nav>
+            {/* SEARCH */}
 
-          {/* ACTIONS */}
+            <div className="relative flex-1">
 
-          <div className="flex items-center gap-2">
+              <Search
+                size={20}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+              />
 
-            <Link
-              href="/shop"
-              className="hidden h-10 w-10 items-center justify-center rounded-full border border-[#eee5dc] text-[#555] transition hover:bg-[#f8f2ec] sm:flex"
-            >
-              <Search size={17} strokeWidth={1.7} />
-            </Link>
+              <input
+                value={search}
+                onChange={(e) =>
+                  setSearch(
+                    e.target.value
+                  )
+                }
+                placeholder="Search for products, brands & more..."
+                className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-12 pr-14 text-sm outline-none transition focus:border-[#168044] focus:bg-white"
+              />
 
-            <Link
-              href="/account"
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-[#eee5dc] text-[#555] transition hover:bg-[#f8f2ec]"
-            >
-              <User size={17} strokeWidth={1.7} />
-            </Link>
+              <button
+                type="button"
+                className="absolute right-1 top-1 h-10 w-11 rounded-lg bg-[#116b39] text-white"
+              >
+                <Search
+                  size={19}
+                  className="mx-auto"
+                />
+              </button>
+
+            </div>
+
+            {/* WISHLIST */}
 
             <Link
               href="/wishlist"
-              className="hidden h-10 w-10 items-center justify-center rounded-full border border-[#eee5dc] text-[#555] transition hover:bg-[#f8f2ec] sm:flex"
+              className="hidden items-center gap-2 px-2 text-center md:flex"
             >
-              <Heart size={17} strokeWidth={1.7} />
+              <Heart size={23} />
+
+              <span className="text-[11px] font-semibold">
+                Wishlist
+              </span>
             </Link>
+
+            {/* ACCOUNT */}
+
+            <Link
+              href="/account"
+              className="hidden items-center gap-2 px-2 text-center md:flex"
+            >
+              <User size={23} />
+
+              <span className="text-[11px] font-semibold">
+                Account
+              </span>
+            </Link>
+
+            {/* CART */}
 
             <Link
               href="/cart"
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-[#8c5b3f] text-white transition hover:bg-[#71462f]"
+              className="relative flex items-center gap-2 px-2"
             >
-              <ShoppingBag
-                size={17}
-                strokeWidth={1.8}
-              />
+              <ShoppingCart size={26} />
+
+              <span className="hidden text-[11px] font-semibold md:block">
+                Cart
+              </span>
+
+              {cartCount > 0 && (
+                <span className="absolute -right-1 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#0c713a] px-1 text-[10px] font-bold text-white">
+                  {cartCount}
+                </span>
+              )}
+            </Link>
+
+            <button
+              type="button"
+              className="md:hidden"
+            >
+              <Menu size={25} />
+            </button>
+
+          </div>
+
+          {/* NAV */}
+
+          <div className="hidden h-12 items-center justify-between border-t border-gray-100 md:flex">
+
+            <Link
+              href="/shop"
+              className="flex items-center gap-2 rounded-lg bg-[#116b39] px-5 py-2 text-sm font-bold text-white"
+            >
+              <Menu size={17} />
+              All Categories
+            </Link>
+
+            <nav className="flex items-center gap-9 text-sm font-semibold">
+
+              <Link href="/">
+                Home
+              </Link>
+
+              <Link href="/shop">
+                Shop
+              </Link>
+
+              <Link href="/shop">
+                Collections
+              </Link>
+
+              <Link href="/track-order">
+                Track Order
+              </Link>
+
+              <Link href="/corporate">
+                Corporate Gifting
+              </Link>
+
+              <Link href="/contact">
+                Contact Us
+              </Link>
+
+            </nav>
+
+            <Link
+              href="/shop"
+              className="flex items-center gap-2 rounded-lg bg-[#ffd526] px-5 py-2 text-sm font-bold text-[#123b25]"
+            >
+              <Gift size={17} />
+              Deals of the Day
             </Link>
 
           </div>
 
         </div>
+
       </header>
 
-      {/* HERO */}
+      {/* =====================================================
+          HERO
+      ===================================================== */}
 
-      <section className="relative overflow-hidden bg-[#f8f1e9]">
+      <section className="mx-auto max-w-[1500px] px-3 pt-4 md:px-5">
 
-        <div className="mx-auto grid min-h-[610px] max-w-[1400px] items-center gap-10 px-5 py-14 md:px-8 lg:grid-cols-2 lg:px-12">
+        <div className="relative h-[300px] overflow-hidden rounded-2xl bg-[#ffd928] shadow-lg md:h-[400px] lg:h-[440px]">
 
-          {/* HERO CONTENT */}
+          <div className="absolute -right-20 -top-32 h-[400px] w-[400px] rounded-full bg-[#168044]/20" />
 
-          <div className="order-2 lg:order-1">
+          <div className="absolute -bottom-40 left-[35%] h-[450px] w-[450px] rounded-full bg-white/15" />
 
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#dbc9b7] bg-white/60 px-4 py-2">
+          <div className="absolute inset-0 bg-gradient-to-r from-[#ffe45b] via-[#ffd928] to-[#ffcf18]" />
 
-              <Sparkles
-                size={13}
-                className="text-[#9a684b]"
-              />
+          <div className="relative z-10 flex h-full items-center px-7 md:px-14 lg:px-16">
 
-              <span className="text-[9px] font-medium uppercase tracking-[0.2em] text-[#79563f]">
-                The Art of Gifting
+            <div className="max-w-[580px]">
+
+              <span className="inline-flex rounded-md bg-[#116b39] px-3 py-1.5 text-[10px] font-bold tracking-wider text-white md:text-xs">
+                PREMIUM COLLECTION
               </span>
 
-            </div>
+              <h1 className="mt-4 text-4xl font-black leading-[1.02] tracking-tight text-[#10251a] md:text-6xl lg:text-7xl">
 
-            <h1 className="max-w-[650px] text-5xl font-semibold leading-[0.98] tracking-[-0.055em] text-[#27211d] md:text-7xl">
+                {banner.title}
 
-              Gifts that
+                <br />
 
-              <br />
+                <span className="text-[#08733c]">
+                  {banner.highlight}
+                </span>
 
-              <span className="text-[#9a684b]">
-                feel personal.
-              </span>
+              </h1>
 
-            </h1>
+              <p className="mt-4 max-w-[480px] text-sm font-medium leading-6 text-[#24362b] md:text-base">
+                {banner.subtitle}
+              </p>
 
-            <p className="mt-7 max-w-xl text-sm leading-7 text-[#766b63] md:text-base">
-              Discover thoughtfully curated premium gifts
-              for birthdays, anniversaries, celebrations,
-              relationships and meaningful moments.
-            </p>
+              <div className="mt-5 flex flex-wrap gap-4 text-xs font-semibold text-[#173b28]">
 
-            <div className="mt-9 flex flex-wrap gap-3">
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck size={17} />
+                  Genuine
+                </span>
 
-              <Link
-                href="/shop"
-                className="group inline-flex h-12 items-center gap-3 rounded-full bg-[#8c5b3f] px-7 text-xs font-semibold text-white transition hover:bg-[#71462f]"
-              >
-                Explore Collection
+                <span className="flex items-center gap-1.5">
+                  <Truck size={17} />
+                  Fast Delivery
+                </span>
 
-                <ArrowRight
-                  size={15}
-                  className="transition group-hover:translate-x-1"
-                />
-              </Link>
-
-              <Link
-                href="/shop?category=corporate"
-                className="inline-flex h-12 items-center gap-3 rounded-full border border-[#d6c5b5] bg-white px-7 text-xs font-medium text-[#604b3c] transition hover:bg-[#f4ebe2]"
-              >
-                Corporate Gifting
-              </Link>
-
-            </div>
-
-            <div className="mt-12 grid max-w-lg grid-cols-3 border-t border-[#dfd3c8] pt-6">
-
-              <HeroStat
-                value={`${activeProducts.length}+`}
-                label="Products"
-              />
-
-              <HeroStat
-                value={`${categories.length}+`}
-                label="Categories"
-              />
-
-              <HeroStat
-                value="100%"
-                label="Curated"
-              />
-
-            </div>
-
-          </div>
-
-          {/* HERO PRODUCT SLIDER */}
-
-          <div className="order-1 lg:order-2">
-
-            <div className="relative mx-auto max-w-[570px]">
-
-              <div className="absolute -right-10 top-10 h-64 w-64 rounded-full bg-[#d9bda5]/30 blur-3xl" />
-
-              <div className="relative overflow-hidden rounded-[34px] bg-white shadow-[0_25px_70px_rgba(90,60,40,0.12)]">
-
-                <div className="relative flex aspect-[0.95] items-center justify-center overflow-hidden bg-[#fdfaf6]">
-
-                  {heroProduct?.images?.[0]?.url ? (
-
-                    <img
-                      key={heroProduct.id}
-                      src={heroProduct.images[0].url}
-                      alt={heroProduct.name}
-                      className="h-full w-full object-contain p-12 transition-all duration-700"
-                    />
-
-                  ) : (
-
-                    <Gift
-                      size={130}
-                      strokeWidth={0.7}
-                      className="text-[#d5c0ae]"
-                    />
-
-                  )}
-
-                  {/* LABEL */}
-
-                  <div className="absolute left-5 top-5 rounded-full bg-white px-4 py-2 text-[8px] font-semibold uppercase tracking-[0.18em] text-[#8c5b3f] shadow-sm">
-                    Featured
-                  </div>
-
-                </div>
-
-                {/* PRODUCT INFO */}
-
-                <div className="border-t border-[#eee6df] p-6">
-
-                  <p className="text-[9px] uppercase tracking-[0.18em] text-[#a48b76]">
-                    {heroProduct?.category?.name ||
-                      "Premium Collection"}
-                  </p>
-
-                  <h2 className="mt-2 text-lg font-medium text-[#29231f]">
-                    {heroProduct?.name ||
-                      "Premium Gift Collection"}
-                  </h2>
-
-                  {heroProduct && (
-                    <div className="mt-3 flex items-center justify-between">
-
-                      <div>
-                        <span className="text-base font-semibold text-[#8c5b3f]">
-                          {formatPrice(
-                            Number(
-                              heroProduct.salePrice ??
-                                heroProduct.price
-                            )
-                          )}
-                        </span>
-                      </div>
-
-                      <Link
-                        href={`/product/${heroProduct.id}`}
-                        className="flex h-10 w-10 items-center justify-center rounded-full bg-[#8c5b3f] text-white transition hover:bg-[#71462f]"
-                      >
-                        <ArrowRight size={15} />
-                      </Link>
-
-                    </div>
-                  )}
-
-                </div>
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck size={17} />
+                  Secure
+                </span>
 
               </div>
 
-              {/* SLIDER DOTS */}
+              <Link
+                href={banner.link}
+                className="mt-6 inline-flex items-center gap-3 rounded-lg bg-[#116b39] px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:scale-[1.02]"
+              >
+                {banner.button}
+                <ArrowRight size={18} />
+              </Link>
 
-              {featuredProducts.length > 1 && (
+            </div>
 
-                <div className="mt-5 flex justify-center gap-2">
+            <div className="absolute right-7 top-8 hidden rounded-full bg-[#14763f] px-8 py-7 text-center text-white shadow-xl md:block">
 
-                  {featuredProducts
-                    .slice(0, 6)
-                    .map((product, index) => (
+              <p className="text-xs font-bold">
+                {banner.offer}
+              </p>
 
-                      <button
-                        key={product.id}
-                        onClick={() =>
-                          setHeroIndex(index)
-                        }
-                        className={`h-1.5 rounded-full transition-all ${
-                          heroIndex === index
-                            ? "w-7 bg-[#8c5b3f]"
-                            : "w-1.5 bg-[#d7c8ba]"
-                        }`}
-                        aria-label={`Show ${product.name}`}
-                      />
-
-                    ))}
-
-                </div>
-
-              )}
+              <p className="text-4xl font-black">
+                DEAL
+              </p>
 
             </div>
 
           </div>
 
-        </div>
-      </section>
+          <button
+            type="button"
+            onClick={() =>
+              setCurrentBanner(
+                (prev) =>
+                  (prev - 1 + banners.length) %
+                  banners.length
+              )
+            }
+            className="absolute left-3 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-lg transition hover:scale-105 md:left-5"
+          >
+            <ChevronLeft size={21} />
+          </button>
 
-      {/* CATEGORY */}
+          <button
+            type="button"
+            onClick={() =>
+              setCurrentBanner(
+                (prev) =>
+                  (prev + 1) %
+                  banners.length
+              )
+            }
+            className="absolute right-3 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-lg transition hover:scale-105 md:right-5"
+          >
+            <ChevronRight size={21} />
+          </button>
 
-      <section className="mx-auto max-w-[1400px] px-5 py-16 md:px-8 lg:px-12">
+          <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-2">
 
-        <SectionHeading
-          eyebrow="Explore"
-          title="Shop by Category"
-          description="Find thoughtful gifts for every occasion."
-          link="/shop"
-        />
-
-        {loading ? (
-
-          <LoadingGrid />
-
-        ) : categories.length > 0 ? (
-
-          <div className="mt-9 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-
-            {categories.slice(0, 6).map(
-              (category, index) => (
-
-                <Link
-                  key={category.id}
-                  href={`/shop?category=${category.slug}`}
-                  className="group overflow-hidden rounded-2xl border border-[#eee5dc] bg-white transition duration-300 hover:-translate-y-1 hover:shadow-lg"
-                >
-
-                  <div className="relative aspect-[1/1.05] overflow-hidden bg-[#f8f3ed]">
-
-                    {category.image ? (
-
-                      <img
-                        src={category.image}
-                        alt={category.name}
-                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                      />
-
-                    ) : (
-
-                      <div className="flex h-full items-center justify-center">
-                        <Gift
-                          size={46}
-                          strokeWidth={1}
-                          className="text-[#cdb8a5]"
-                        />
-                      </div>
-
-                    )}
-
-                  </div>
-
-                  <div className="p-4">
-
-                    <p className="text-[8px] text-[#b19b87]">
-                      0{index + 1}
-                    </p>
-
-                    <h3 className="mt-1 truncate text-sm font-medium text-[#332b26]">
-                      {category.name}
-                    </h3>
-
-                    <div className="mt-3 flex items-center gap-1 text-[8px] font-medium uppercase tracking-[0.16em] text-[#8c5b3f]">
-                      Explore
-                      <ArrowRight size={10} />
-                    </div>
-
-                  </div>
-
-                </Link>
-
+            {banners.map(
+              (_, index) => (
+                <button
+                  type="button"
+                  key={index}
+                  onClick={() =>
+                    setCurrentBanner(
+                      index
+                    )
+                  }
+                  className={`h-2 rounded-full transition-all ${
+                    index ===
+                    currentBanner
+                      ? "w-7 bg-[#116b39]"
+                      : "w-2 bg-white"
+                  }`}
+                />
               )
             )}
 
           </div>
 
-        ) : (
-
-          <EmptyState text="Categories added from Admin will appear here." />
-
-        )}
+        </div>
 
       </section>
 
-      {/* FEATURED */}
+      {/* =====================================================
+          BENEFITS
+      ===================================================== */}
 
-      <section className="border-y border-[#eee5dc] bg-white">
+      <section className="mx-auto max-w-[1500px] px-3 pt-5 md:px-5">
 
-        <div className="mx-auto max-w-[1400px] px-5 py-16 md:px-8 lg:px-12">
+        <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm md:grid-cols-4">
 
-          <SectionHeading
-            eyebrow="Curated For You"
-            title="Featured Gifts"
-            description="Beautiful gifts selected for your special moments."
-            link="/shop"
-          />
+          <div className="flex items-center gap-3 border-b border-gray-100 p-4 md:border-b-0 md:border-r">
+            <Truck className="text-[#08733c]" />
 
-          {loading ? (
+            <div>
+              <p className="text-sm font-bold">
+                Free Delivery
+              </p>
 
-            <LoadingGrid />
-
-          ) : activeProducts.length > 0 ? (
-
-            <div className="mt-9 grid grid-cols-2 gap-x-4 gap-y-9 sm:grid-cols-3 lg:grid-cols-4">
-
-              {activeProducts
-                .slice(0, 8)
-                .map((product) => (
-
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                  />
-
-                ))}
-
+              <p className="text-xs text-gray-500">
+                On orders above ₹499
+              </p>
             </div>
+          </div>
 
-          ) : (
+          <div className="flex items-center gap-3 border-b border-gray-100 p-4 md:border-b-0 md:border-r">
+            <ShieldCheck className="text-[#08733c]" />
 
-            <EmptyState text="Products added from Admin will appear here." />
+            <div>
+              <p className="text-sm font-bold">
+                Secure Payments
+              </p>
 
+              <p className="text-xs text-gray-500">
+                100% safe & secure
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 p-4 md:border-r">
+            <ShieldCheck className="text-[#08733c]" />
+
+            <div>
+              <p className="text-sm font-bold">
+                Genuine Products
+              </p>
+
+              <p className="text-xs text-gray-500">
+                Trusted & verified
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 p-4">
+            <RotateCcw className="text-[#08733c]" />
+
+            <div>
+              <p className="text-sm font-bold">
+                Easy Returns
+              </p>
+
+              <p className="text-xs text-gray-500">
+                Hassle-free returns
+              </p>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      {/* =====================================================
+          CATEGORIES
+      ===================================================== */}
+
+      <section className="mx-auto max-w-[1500px] px-3 pt-8 md:px-5">
+
+        <div className="mb-4 flex items-center justify-between">
+
+          <h2 className="text-xl font-black md:text-2xl">
+            Shop by Categories
+          </h2>
+
+          <Link
+            href="/shop"
+            className="flex items-center gap-1 text-sm font-bold text-[#08733c]"
+          >
+            View All
+            <ArrowRight size={16} />
+          </Link>
+
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+
+          {visibleCategories.map(
+            (
+              category,
+              index
+            ) => {
+
+              const name =
+                getCategoryName(
+                  category
+                );
+
+              const categoryId =
+                getCategoryId(
+                  category,
+                  index
+                );
+
+              return (
+                <Link
+                  href={`/shop?category=${encodeURIComponent(
+                    category.slug ||
+                      name
+                  )}`}
+                  key={categoryId}
+                  className="group rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm transition hover:-translate-y-1 hover:border-[#168044] hover:shadow-md"
+                >
+
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-[#f1f8e8] text-[#08733c]">
+
+                    {category.image ? (
+                      <img
+                        src={category.image}
+                        alt={name}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display =
+                            "none";
+                        }}
+                      />
+                    ) : (
+                      <span className="text-2xl">
+                        🛍️
+                      </span>
+                    )}
+
+                  </div>
+
+                  <p className="mt-3 line-clamp-2 text-sm font-semibold text-gray-800 transition group-hover:text-[#08733c]">
+                    {name}
+                  </p>
+
+                </Link>
+              );
+            }
           )}
 
         </div>
 
       </section>
 
-      {/* PROMO BANNER */}
+      {/* =====================================================
+          FEATURED PRODUCTS
+      ===================================================== */}
 
-      <section className="mx-auto max-w-[1400px] px-5 py-16 md:px-8 lg:px-12">
+      <section className="mx-auto max-w-[1500px] px-3 pt-9 md:px-5">
 
-        <div className="relative overflow-hidden rounded-[30px] bg-[#eee1d4] px-7 py-12 md:px-12 lg:px-16">
+        <div className="mb-4 flex items-center justify-between">
 
-          <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/40 blur-3xl" />
+          <div>
 
-          <div className="relative grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
+            <h2 className="text-xl font-black md:text-2xl">
+              Featured Products
+            </h2>
 
-            <div>
-
-              <p className="text-[8px] font-semibold uppercase tracking-[0.3em] text-[#8c5b3f]">
-                Premium Experiences
-              </p>
-
-              <h2 className="mt-4 max-w-2xl text-3xl font-semibold tracking-[-0.04em] text-[#332923] md:text-5xl">
-
-                Make every occasion
-
-                <br />
-
-                <span className="text-[#8c5b3f]">
-                  unforgettable.
-                </span>
-
-              </h2>
-
-              <p className="mt-5 max-w-xl text-sm leading-7 text-[#76675d]">
-                From personal celebrations to corporate
-                gifting, discover premium products selected
-                to make your gesture truly special.
-              </p>
-
-            </div>
-
-            <Link
-              href="/shop"
-              className="inline-flex h-12 items-center justify-center gap-3 rounded-full bg-[#8c5b3f] px-7 text-xs font-semibold text-white transition hover:bg-[#71462f]"
-            >
-              Shop Now
-              <ArrowRight size={15} />
-            </Link>
+            <p className="mt-1 text-xs text-gray-500">
+              Handpicked products just for you
+            </p>
 
           </div>
 
+          <Link
+            href="/shop"
+            className="flex items-center gap-1 text-sm font-bold text-[#08733c]"
+          >
+            View All
+            <ArrowRight size={16} />
+          </Link>
+
         </div>
 
-      </section>
+        {loading ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
 
-      {/* BEST SELLERS */}
+            {Array.from({
+              length: 6,
+            }).map(
+              (_, index) => (
+                <div
+                  key={index}
+                  className="h-[340px] animate-pulse rounded-xl bg-gray-100"
+                />
+              )
+            )}
 
-      <section className="mx-auto max-w-[1400px] px-5 pb-16 md:px-8 lg:px-12">
+          </div>
+        ) : filteredProducts.length ===
+          0 ? (
 
-        <SectionHeading
-          eyebrow="Popular Picks"
-          title="Best Sellers"
-          description="Customer favourites worth gifting."
-          link="/shop"
-        />
+          <div className="rounded-xl bg-white p-10 text-center">
 
-        {bestSellers.length > 0 && (
+            <p className="font-semibold">
+              No products found
+            </p>
 
-          <div className="mt-9 grid grid-cols-2 gap-x-4 gap-y-9 sm:grid-cols-4">
+          </div>
 
-            {bestSellers.map((product) => (
+        ) : (
 
-              <ProductCard
-                key={`best-${product.id}`}
-                product={product}
-              />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
 
-            ))}
+            {filteredProducts
+              .slice(0, 18)
+              .map(
+                (product) => {
+
+                  const image =
+                    getProductImage(
+                      product
+                    );
+
+                  const price =
+                    Number(
+                      product.price ??
+                        product.salePrice ??
+                        0
+                    );
+
+                  const mrp =
+                    Number(
+                      product.mrp ??
+                        price
+                    );
+
+                  const discount =
+                    mrp > price &&
+                    price > 0
+                      ? Math.round(
+                          ((mrp -
+                            price) /
+                            mrp) *
+                            100
+                        )
+                      : 0;
+
+                  return (
+                    <div
+                      key={String(
+                        product.id
+                      )}
+                      className="group overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+                    >
+
+                      {/* IMAGE */}
+
+                      <Link
+                        href={`/product/${product.id}`}
+                        className="relative block"
+                      >
+
+                        {discount > 0 && (
+                          <span className="absolute left-2 top-2 z-10 rounded-md bg-[#0c713a] px-2 py-1 text-[10px] font-bold text-white">
+                            {discount}% OFF
+                          </span>
+                        )}
+
+                        <div className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm">
+                          <Heart
+                            size={16}
+                            className="text-gray-600"
+                          />
+                        </div>
+
+                        <div className="flex h-[210px] items-center justify-center overflow-hidden bg-white p-4">
+
+                          {image ? (
+
+                            <img
+                              src={image}
+                              alt={
+                                product.name ||
+                                "Product"
+                              }
+                              loading="lazy"
+                              className="h-full w-full object-contain transition duration-300 group-hover:scale-105"
+                              onError={(e) => {
+                                console.error(
+                                  "HOME IMAGE FAILED:",
+                                  image
+                                );
+
+                                e.currentTarget.style.display =
+                                  "none";
+
+                                const parent =
+                                  e.currentTarget.parentElement;
+
+                                if (
+                                  parent &&
+                                  !parent.querySelector(
+                                    "[data-image-fallback]"
+                                  )
+                                ) {
+                                  const fallback =
+                                    document.createElement(
+                                      "div"
+                                    );
+
+                                  fallback.setAttribute(
+                                    "data-image-fallback",
+                                    "true"
+                                  );
+
+                                  fallback.className =
+                                    "flex h-full w-full items-center justify-center bg-gray-50 text-gray-300";
+
+                                  fallback.innerHTML =
+                                    "🛍️";
+
+                                  parent.appendChild(
+                                    fallback
+                                  );
+                                }
+                              }}
+                            />
+
+                          ) : (
+
+                            <div className="flex h-full w-full items-center justify-center bg-gray-50 text-gray-300">
+                              <Gift size={45} />
+                            </div>
+
+                          )}
+
+                        </div>
+
+                      </Link>
+
+                      {/* DETAILS */}
+
+                      <div className="p-3">
+
+                        <p className="mb-1 line-clamp-1 text-[10px] font-bold uppercase text-[#08733c]">
+                          {product.categoryName ||
+                            "Premium Product"}
+                        </p>
+
+                        <Link
+                          href={`/product/${product.id}`}
+                        >
+                          <h3 className="line-clamp-2 min-h-[38px] text-sm font-semibold leading-5 text-gray-800 hover:text-[#08733c]">
+                            {product.name ||
+                              "Product"}
+                          </h3>
+                        </Link>
+
+                        {product.brandName && (
+                          <p className="mt-1 line-clamp-1 text-[11px] text-gray-500">
+                            {product.brandName}
+                          </p>
+                        )}
+
+                        <div className="mt-2 flex items-center gap-2">
+
+                          <span className="text-lg font-black text-[#111827]">
+                            {formatPrice(
+                              price
+                            )}
+                          </span>
+
+                          {mrp > price && (
+                            <span className="text-xs text-gray-400 line-through">
+                              {formatPrice(
+                                mrp
+                              )}
+                            </span>
+                          )}
+
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-between gap-2">
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              addToCart(
+                                product
+                              )
+                            }
+                            className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-[#ffd21f] py-2.5 text-xs font-black text-[#123b25] transition hover:bg-[#ffca00]"
+                          >
+                            <ShoppingCart
+                              size={14}
+                            />
+                            Add to Cart
+                          </button>
+
+                          <Link
+                            href={`/product/${product.id}`}
+                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200"
+                          >
+                            <ArrowRight
+                              size={16}
+                            />
+                          </Link>
+
+                        </div>
+
+                      </div>
+
+                    </div>
+                  );
+                }
+              )}
 
           </div>
 
@@ -641,84 +1641,40 @@ export default function Home() {
 
       </section>
 
-      {/* WHY BPS */}
+      {/* =====================================================
+          YELLOW OFFER
+      ===================================================== */}
 
-      <section className="border-y border-[#eee5dc] bg-[#faf6f1]">
+      <section className="mx-auto max-w-[1500px] px-3 pt-9 md:px-5">
 
-        <div className="mx-auto max-w-[1400px] px-5 py-16 md:px-8 lg:px-12">
+        <div className="relative overflow-hidden rounded-2xl bg-[#ffd928] p-7 md:p-10">
 
-          <div className="text-center">
+          <div className="absolute -right-20 -top-20 h-60 w-60 rounded-full bg-[#168044]/20" />
 
-            <p className="text-[8px] font-semibold uppercase tracking-[0.3em] text-[#8c5b3f]">
-              The BPS Standard
-            </p>
-
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[#332923]">
-              Gifting, made special.
-            </h2>
-
-          </div>
-
-          <div className="mt-10 grid gap-4 md:grid-cols-3">
-
-            <ServiceCard
-              icon={<Gift size={19} />}
-              title="Thoughtfully Curated"
-              text="Every product is selected with quality and gifting in mind."
-            />
-
-            <ServiceCard
-              icon={<Truck size={19} />}
-              title="Reliable Delivery"
-              text="Carefully packed products delivered safely to your doorstep."
-            />
-
-            <ServiceCard
-              icon={<ShieldCheck size={19} />}
-              title="Premium Quality"
-              text="Products and presentation designed to make every gift memorable."
-            />
-
-          </div>
-
-        </div>
-
-      </section>
-
-      {/* CORPORATE */}
-
-      <section className="mx-auto max-w-[1400px] px-5 py-16 md:px-8 lg:px-12">
-
-        <div className="rounded-[28px] border border-[#e9ded4] bg-white p-8 shadow-sm md:p-12">
-
-          <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="relative z-10 flex flex-col items-start justify-between gap-5 md:flex-row md:items-center">
 
             <div>
 
-              <p className="text-[8px] font-semibold uppercase tracking-[0.3em] text-[#8c5b3f]">
-                Corporate Gifting
+              <p className="text-xs font-bold uppercase tracking-wider text-[#116b39]">
+                Extra Savings
               </p>
 
-              <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[#332923]">
-                Gifts for teams,
-                <br />
-                clients & milestones.
+              <h2 className="mt-1 text-3xl font-black md:text-4xl">
+                Use Code: BUDGET10
               </h2>
 
-              <p className="mt-4 max-w-xl text-sm leading-7 text-[#76675d]">
-                Looking for bulk gifting solutions? Build
-                memorable corporate experiences with premium
-                curated gifts.
+              <p className="mt-2 text-sm font-medium">
+                Get extra 10% OFF on selected prepaid orders
               </p>
 
             </div>
 
             <Link
-              href="/shop?category=corporate"
-              className="inline-flex h-12 items-center justify-center gap-3 rounded-full border border-[#cdb7a5] px-6 text-xs font-medium text-[#8c5b3f] transition hover:bg-[#f8f0e9]"
+              href="/shop"
+              className="flex items-center gap-2 rounded-lg bg-[#116b39] px-7 py-3 text-sm font-bold text-white shadow-md"
             >
-              Explore Corporate
-              <ArrowRight size={14} />
+              SHOP NOW
+              <ArrowRight size={17} />
             </Link>
 
           </div>
@@ -727,89 +1683,294 @@ export default function Home() {
 
       </section>
 
-      {/* FOOTER */}
+      {/* =====================================================
+          BEST SELLERS
+      ===================================================== */}
 
-      <footer className="border-t border-[#eee5dc] bg-white">
+      <section className="mx-auto max-w-[1500px] px-3 pb-10 pt-9 md:px-5">
 
-        <div className="mx-auto max-w-[1400px] px-5 py-14 md:px-8 lg:px-12">
+        <div className="mb-4 flex items-center justify-between">
 
-          <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-5">
+          <h2 className="text-xl font-black md:text-2xl">
+            Best Sellers
+          </h2>
 
-            {/* BRAND */}
+          <Link
+            href="/shop"
+            className="flex items-center gap-1 text-sm font-bold text-[#08733c]"
+          >
+            View All
+            <ArrowRight size={16} />
+          </Link>
 
-            <div className="lg:col-span-2">
+        </div>
 
-              <div className="text-2xl font-semibold tracking-[-0.05em]">
-                BPS
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+
+          {products
+            .slice(18, 24)
+            .map(
+              (product) => {
+
+                const image =
+                  getProductImage(
+                    product
+                  );
+
+                const price =
+                  Number(
+                    product.price ??
+                      0
+                  );
+
+                const mrp =
+                  Number(
+                    product.mrp ??
+                      price
+                  );
+
+                return (
+                  <Link
+                    href={`/product/${product.id}`}
+                    key={String(
+                      product.id
+                    )}
+                    className="group rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+                  >
+
+                    <div className="flex h-[180px] items-center justify-center overflow-hidden">
+
+                      {image ? (
+                        <img
+                          src={image}
+                          alt={
+                            product.name ||
+                            "Product"
+                          }
+                          loading="lazy"
+                          className="h-full w-full object-contain transition group-hover:scale-105"
+                        />
+                      ) : (
+                        <Gift
+                          size={45}
+                          className="text-gray-300"
+                        />
+                      )}
+
+                    </div>
+
+                    <p className="mt-3 line-clamp-2 text-sm font-semibold">
+                      {product.name ||
+                        "Premium Product"}
+                    </p>
+
+                    <div className="mt-2 flex items-center gap-2">
+
+                      <span className="font-black">
+                        {formatPrice(
+                          price
+                        )}
+                      </span>
+
+                      {mrp > price && (
+                        <span className="text-xs text-gray-400 line-through">
+                          {formatPrice(
+                            mrp
+                          )}
+                        </span>
+                      )}
+
+                    </div>
+
+                    <div className="mt-2 flex items-center gap-1 text-xs font-semibold text-orange-500">
+                      <Star
+                        size={13}
+                        fill="currentColor"
+                      />
+                      4.5
+                    </div>
+
+                  </Link>
+                );
+              }
+            )}
+
+        </div>
+
+      </section>
+
+      {/* =====================================================
+          TRUST STRIP
+      ===================================================== */}
+
+      <section className="border-t border-gray-100 bg-white">
+
+        <div className="mx-auto grid max-w-[1500px] grid-cols-2 md:grid-cols-6">
+
+          {[
+            [
+              "100% Genuine",
+              ShieldCheck,
+            ],
+            [
+              "4.6+ Star Rating",
+              Star,
+            ],
+            [
+              "Secure Payments",
+              ShieldCheck,
+            ],
+            [
+              "300+ Brands",
+              Tag,
+            ],
+            [
+              "7 Days Returns",
+              RotateCcw,
+            ],
+            [
+              "Pan India Delivery",
+              Truck,
+            ],
+          ].map(
+            ([text, Icon], index) => {
+
+              const IconComponent =
+                Icon as typeof ShieldCheck;
+
+              return (
+                <div
+                  key={index}
+                  className="flex items-center justify-center gap-2 border-b border-gray-100 p-5 text-center md:border-b-0 md:border-r last:border-r-0"
+                >
+
+                  <IconComponent
+                    size={21}
+                    className="text-[#08733c]"
+                  />
+
+                  <span className="text-xs font-bold text-gray-700">
+                    {text as string}
+                  </span>
+
+                </div>
+              );
+            }
+          )}
+
+        </div>
+
+      </section>
+
+      {/* =====================================================
+          FOOTER
+      ===================================================== */}
+
+      <footer className="bg-[#0c3520] text-white">
+
+        <div className="mx-auto max-w-[1500px] px-5 py-10">
+
+          <div className="grid gap-8 md:grid-cols-4">
+
+            <div>
+
+              <div className="text-2xl font-black">
+                budgetree
               </div>
 
-              <p className="mt-1 text-[7px] uppercase tracking-[0.35em] text-[#ad9b8c]">
-                Budgetree Premium Store
-              </p>
-
-              <p className="mt-5 max-w-md text-xs leading-6 text-[#81766e]">
-                Premium gifts thoughtfully curated for
-                celebrations, relationships and memorable
-                moments.
+              <p className="mt-3 max-w-sm text-sm leading-6 text-white/70">
+                Premium products, gifting and lifestyle essentials delivered with trust.
               </p>
 
             </div>
 
-            {/* EXPLORE */}
+            <div>
 
-            <FooterColumn
-              title="Explore"
-              links={[
-                ["Shop", "/shop"],
-                [
-                  "Collections",
-                  "/shop?sort=featured",
-                ],
-                ["Wishlist", "/wishlist"],
-                ["Track Order", "/track-order"],
-              ]}
-            />
+              <h3 className="font-bold">
+                Quick Links
+              </h3>
 
-            {/* ACCOUNT */}
+              <div className="mt-3 space-y-2 text-sm text-white/70">
 
-            <FooterColumn
-              title="Account"
-              links={[
-                ["My Account", "/account"],
-                ["Cart", "/cart"],
-                ["Orders", "/account/orders"],
-                ["Contact", "/contact"],
-              ]}
-            />
+                <Link
+                  className="block hover:text-white"
+                  href="/"
+                >
+                  Home
+                </Link>
 
-            {/* ADMIN */}
+                <Link
+                  className="block hover:text-white"
+                  href="/shop"
+                >
+                  Shop
+                </Link>
+
+                <Link
+                  className="block hover:text-white"
+                  href="/track-order"
+                >
+                  Track Order
+                </Link>
+
+                <Link
+                  className="block font-semibold text-[#ffd928] transition hover:text-white"
+                  href="/admin"
+                >
+                  Admin Portal
+                </Link>
+
+              </div>
+
+            </div>
 
             <div>
 
-              <p className="text-[8px] font-semibold uppercase tracking-[0.25em] text-[#a18f80]">
-                Business
-              </p>
+              <h3 className="font-bold">
+                Customer Support
+              </h3>
 
-              <div className="mt-5">
+              <div className="mt-3 space-y-2 text-sm text-white/70">
 
-                <Link
-                  href="/admin"
-                  className="group inline-flex items-center gap-2 text-xs text-[#81766e] transition hover:text-[#8c5b3f]"
-                >
+                <p>
+                  Contact Us
+                </p>
 
-                  <ShieldCheck
-                    size={14}
-                    className="text-[#8c5b3f]"
-                  />
+                <p>
+                  Returns & Refunds
+                </p>
 
-                  Admin Portal
+                <p>
+                  Shipping Policy
+                </p>
 
-                  <ChevronRight
-                    size={12}
-                    className="transition group-hover:translate-x-1"
-                  />
+              </div>
 
-                </Link>
+            </div>
+
+            <div>
+
+              <h3 className="font-bold">
+                Why Budgetree?
+              </h3>
+
+              <div className="mt-3 space-y-2 text-sm text-white/70">
+
+                <p>
+                  ✓ Genuine Products
+                </p>
+
+                <p>
+                  ✓ Secure Payments
+                </p>
+
+                <p>
+                  ✓ Fast Delivery
+                </p>
+
+                <p>
+                  ✓ Easy Returns
+                </p>
 
               </div>
 
@@ -817,16 +1978,8 @@ export default function Home() {
 
           </div>
 
-          <div className="mt-12 flex flex-col justify-between gap-3 border-t border-[#eee5dc] pt-6 text-[9px] text-[#aa9d94] md:flex-row">
-
-            <span>
-              © {new Date().getFullYear()} Budgetree Premium Store. All rights reserved.
-            </span>
-
-            <span>
-              Premium gifting made simple.
-            </span>
-
+          <div className="mt-8 border-t border-white/10 pt-5 text-center text-xs text-white/50">
+            © {new Date().getFullYear()} Budgetree Premium Store. All rights reserved.
           </div>
 
         </div>
@@ -835,311 +1988,4 @@ export default function Home() {
 
     </main>
   );
-}
-
-/* PRODUCT CARD */
-
-function ProductCard({
-  product,
-}: {
-  product: Product;
-}) {
-  const price = Number(product.price);
-
-  const salePrice =
-    product.salePrice !== null &&
-    product.salePrice !== undefined
-      ? Number(product.salePrice)
-      : null;
-
-  const finalPrice =
-    salePrice !== null &&
-    salePrice < price
-      ? salePrice
-      : price;
-
-  const image =
-    product.images?.[0]?.url ?? null;
-
-  const discount =
-    salePrice !== null &&
-    salePrice < price
-      ? Math.round(
-          ((price - salePrice) / price) * 100
-        )
-      : 0;
-
-  return (
-    <Link
-      href={`/product/${product.id}`}
-      className="group block"
-    >
-
-      <div className="relative overflow-hidden rounded-[20px] bg-[#f8f4ef]">
-
-        <div className="relative aspect-[0.92]">
-
-          {image ? (
-
-            <img
-              src={image}
-              alt={product.name}
-              className="h-full w-full object-contain p-5 transition duration-500 group-hover:scale-[1.04]"
-            />
-
-          ) : (
-
-            <div className="flex h-full items-center justify-center">
-              <Gift
-                size={55}
-                strokeWidth={0.8}
-                className="text-[#cdb8a5]"
-              />
-            </div>
-
-          )}
-
-          {discount > 0 && (
-
-            <span className="absolute left-3 top-3 rounded-full bg-[#8c5b3f] px-2.5 py-1 text-[7px] font-semibold text-white">
-              -{discount}%
-            </span>
-
-          )}
-
-          {product.featured && (
-
-            <span className="absolute right-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[7px] font-medium uppercase tracking-[0.1em] text-[#8c5b3f]">
-              Featured
-            </span>
-
-          )}
-
-        </div>
-
-      </div>
-
-      <div className="px-1 pt-4">
-
-        <p className="truncate text-[8px] uppercase tracking-[0.16em] text-[#a48d79]">
-          {product.category?.name ||
-            "Premium Collection"}
-        </p>
-
-        <h3 className="mt-1.5 truncate text-sm font-medium text-[#302822]">
-          {product.name}
-        </h3>
-
-        <div className="mt-2 flex items-center gap-2">
-
-          <span className="text-sm font-semibold text-[#8c5b3f]">
-            {formatPrice(finalPrice)}
-          </span>
-
-          {salePrice !== null &&
-            salePrice < price && (
-
-              <span className="text-[11px] text-[#aaa09a] line-through">
-                {formatPrice(price)}
-              </span>
-
-            )}
-
-        </div>
-
-      </div>
-
-    </Link>
-  );
-}
-
-/* SECTION HEADING */
-
-function SectionHeading({
-  eyebrow,
-  title,
-  description,
-  link,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-  link: string;
-}) {
-  return (
-    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-
-      <div>
-
-        <p className="text-[8px] font-semibold uppercase tracking-[0.3em] text-[#8c5b3f]">
-          {eyebrow}
-        </p>
-
-        <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[#302822] md:text-4xl">
-          {title}
-        </h2>
-
-        <p className="mt-2 max-w-xl text-sm text-[#81766e]">
-          {description}
-        </p>
-
-      </div>
-
-      <Link
-        href={link}
-        className="inline-flex items-center gap-2 text-[9px] font-medium uppercase tracking-[0.18em] text-[#8c5b3f] transition hover:text-[#60402d]"
-      >
-        View All
-        <ChevronRight size={13} />
-      </Link>
-
-    </div>
-  );
-}
-
-/* SERVICE */
-
-function ServiceCard({
-  icon,
-  title,
-  text,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  text: string;
-}) {
-  return (
-    <div className="rounded-[22px] border border-[#e9ded4] bg-white p-7">
-
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f4e9df] text-[#8c5b3f]">
-        {icon}
-      </div>
-
-      <h3 className="mt-5 text-sm font-semibold text-[#342b25]">
-        {title}
-      </h3>
-
-      <p className="mt-2 text-xs leading-6 text-[#81766e]">
-        {text}
-      </p>
-
-    </div>
-  );
-}
-
-/* HERO STAT */
-
-function HeroStat({
-  value,
-  label,
-}: {
-  value: string;
-  label: string;
-}) {
-  return (
-    <div>
-
-      <p className="text-lg font-semibold text-[#8c5b3f]">
-        {value}
-      </p>
-
-      <p className="mt-1 text-[8px] uppercase tracking-[0.14em] text-[#a18f80]">
-        {label}
-      </p>
-
-    </div>
-  );
-}
-
-/* FOOTER COLUMN */
-
-function FooterColumn({
-  title,
-  links,
-}: {
-  title: string;
-  links: [string, string][];
-}) {
-  return (
-    <div>
-
-      <p className="text-[8px] font-semibold uppercase tracking-[0.25em] text-[#a18f80]">
-        {title}
-      </p>
-
-      <div className="mt-5 space-y-3">
-
-        {links.map(([label, href]) => (
-
-          <Link
-            key={label}
-            href={href}
-            className="block text-xs text-[#81766e] transition hover:text-[#8c5b3f]"
-          >
-            {label}
-          </Link>
-
-        ))}
-
-      </div>
-
-    </div>
-  );
-}
-
-/* EMPTY */
-
-function EmptyState({
-  text,
-}: {
-  text: string;
-}) {
-  return (
-    <div className="mt-9 rounded-2xl border border-dashed border-[#ddd0c4] bg-[#faf7f3] px-6 py-14 text-center">
-
-      <Gift
-        size={38}
-        strokeWidth={1}
-        className="mx-auto text-[#cbb6a3]"
-      />
-
-      <p className="mt-4 text-xs text-[#8c8077]">
-        {text}
-      </p>
-
-    </div>
-  );
-}
-
-/* LOADING */
-
-function LoadingGrid() {
-  return (
-    <div className="mt-9 grid grid-cols-2 gap-4 sm:grid-cols-4">
-
-      {[1, 2, 3, 4].map((item) => (
-
-        <div
-          key={item}
-          className="animate-pulse overflow-hidden rounded-2xl bg-[#f4eee8]"
-        >
-          <div className="aspect-square" />
-          <div className="p-4">
-            <div className="h-3 w-20 rounded bg-[#e6dcd2]" />
-            <div className="mt-3 h-4 w-32 rounded bg-[#e6dcd2]" />
-          </div>
-        </div>
-
-      ))}
-
-    </div>
-  );
-}
-
-/* PRICE */
-
-function formatPrice(value: number) {
-  return `₹${value.toLocaleString("en-IN", {
-    maximumFractionDigits: 0,
-  })}`;
 }
