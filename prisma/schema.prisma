@@ -7,69 +7,57 @@ datasource db {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
+  id           Int        @id @default(autoincrement())
   name         String
-  email        String   @unique
+  email        String     @unique
   passwordHash String
-  role         UserRole @default(CUSTOMER)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  orders   Order[]
-  wishlist Wishlist[]
+  role         UserRole   @default(CUSTOMER)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  orders       Order[]
+  wishlist     Wishlist[]
 
   @@index([role])
 }
 
 model Category {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   name        String
-  slug        String   @unique
+  slug        String    @unique
   image       String?
   description String?
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  products Product[]
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
 }
 
 model Product {
-  id          Int     @id @default(autoincrement())
-
-  sku         String  @unique
-  name        String
-  slug        String  @unique
-  description String?
-
-  // Pricing
-  price     Decimal  @db.Decimal(10, 2)
-  mrp       Decimal? @db.Decimal(10, 2)
-  salePrice Decimal? @db.Decimal(10, 2)
-
-  stock    Int           @default(0)
-  status   ProductStatus @default(ACTIVE)
-  featured Boolean       @default(false)
-
-  // Category
-  categoryId Int?
-
-  // SiriPay information
-  externalId       String?
-  externalSource   String?
-  brandName        String?
-  subCategoryName  String?
+  id                Int            @id @default(autoincrement())
+  sku               String         @unique
+  name              String
+  slug              String         @unique
+  description       String?
+  price             Decimal        @db.Decimal(10, 2)
+  salePrice         Decimal?       @db.Decimal(10, 2)
+  stock             Int            @default(0)
+  status            ProductStatus  @default(ACTIVE)
+  featured          Boolean        @default(false)
+  categoryId        Int?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  brandName         String?
+  externalId        String?
+  externalSource    String?
+  hsnCode           String?
+  mrp               Decimal?       @db.Decimal(10, 2)
   primaryCategoryId Int?
   subCategoryId     Int?
-  hsnCode           String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  category   Category?      @relation(fields: [categoryId], references: [id])
-  images     ProductImage[]
-  orderItems OrderItem[]
-  wishlist   Wishlist[]
+  subCategoryName   String?
+  orderItems        OrderItem[]
+  category          Category?      @relation(fields: [categoryId], references: [id])
+  images            ProductImage[]
+  wishlist          Wishlist[]
 
   @@index([categoryId])
   @@index([status])
@@ -86,11 +74,11 @@ model ExternalApi {
   authType    String   @default("NONE")
   username    String?
   password    String?
-  apiKey      String?
-  jwtToken    String?
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  apiKey      String?
+  jwtToken    String?
 
   @@index([active])
 }
@@ -102,8 +90,7 @@ model ProductImage {
   alt       String?
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
 }
@@ -113,9 +100,8 @@ model Wishlist {
   userId    Int
   productId Int
   createdAt DateTime @default(now())
-
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, productId])
   @@index([userId])
@@ -123,34 +109,27 @@ model Wishlist {
 }
 
 model Order {
-  id          Int    @id @default(autoincrement())
-  orderNumber String @unique
-
-  userId Int?
-
-  customerName  String
-  customerEmail String
-  customerPhone String?
-
+  id              Int           @id @default(autoincrement())
+  orderNumber     String        @unique
+  userId          Int?
+  customerName    String
+  customerEmail   String
+  customerPhone   String?
   shippingAddress String?
   city            String?
   state           String?
   pincode         String?
-
-  subtotal    Decimal @db.Decimal(10, 2)
-  shippingFee Decimal @default(0) @db.Decimal(10, 2)
-  discount    Decimal @default(0) @db.Decimal(10, 2)
-  total       Decimal @db.Decimal(10, 2)
-
-  status        OrderStatus   @default(PENDING)
-  paymentStatus PaymentStatus @default(PENDING)
-  paymentMethod String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user  User?       @relation(fields: [userId], references: [id])
-  items OrderItem[]
+  subtotal        Decimal       @db.Decimal(10, 2)
+  shippingFee     Decimal       @default(0) @db.Decimal(10, 2)
+  discount        Decimal       @default(0) @db.Decimal(10, 2)
+  total           Decimal       @db.Decimal(10, 2)
+  status          OrderStatus   @default(PENDING)
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentMethod   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  user            User?         @relation(fields: [userId], references: [id])
+  items           OrderItem[]
 
   @@index([userId])
   @@index([status])
@@ -159,22 +138,17 @@ model Order {
 }
 
 model OrderItem {
-  id        Int  @id @default(autoincrement())
-  orderId   Int
-  productId Int?
-
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  productId   Int?
   productName String
   sku         String?
-
-  quantity Int
-
-  price Decimal @db.Decimal(10, 2)
-  total Decimal @db.Decimal(10, 2)
-
-  createdAt DateTime @default(now())
-
-  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product? @relation(fields: [productId], references: [id])
+  quantity    Int
+  price       Decimal  @db.Decimal(10, 2)
+  total       Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product? @relation(fields: [productId], references: [id])
 
   @@index([orderId])
   @@index([productId])

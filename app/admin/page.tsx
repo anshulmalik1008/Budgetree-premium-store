@@ -1,9 +1,10 @@
-// app/admin/page.tsx
 
-"use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { getCurrentUserId } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { redirect } from "next/navigation";
+
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -29,86 +30,321 @@ type DashboardData = {
   siripayConnected: boolean;
 };
 
-export default function AdminPage() {
-  const [data, setData] = useState<DashboardData>({
-    products: 0,
-    siripayProducts: 0,
-    categories: 0,
-    customers: 0,
-    orders: 0,
-    siripayConnected: false,
+type AnyObject = Record<string, any>;
+
+function findArray(
+  data: any,
+  keys: string[] = [],
+): any[] {
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (!data || typeof data !== "object") {
+    return [];
+  }
+
+  for (const key of keys) {
+    if (Array.isArray(data[key])) {
+      return data[key];
+    }
+  }
+
+  if (Array.isArray(data.data)) {
+    return data.data;
+  }
+
+  if (
+    data.data &&
+    typeof data.data === "object"
+  ) {
+    for (const key of keys) {
+      if (Array.isArray(data.data[key])) {
+        return data.data[key];
+      }
+    }
+  }
+
+  return [];
+}
+
+async function fetchJson(
+  url: string,
+  headers: Record<string, string>,
+) {
+  const response = await fetch(url, {
+    method: "GET",
+    headers,
+    cache: "no-store",
   });
 
-  const [loading, setLoading] = useState(true);
+  if (!response.ok) {
+    throw new Error(
+      `Request failed: ${response.status} ${response.statusText}`,
+    );
+  }
 
-  useEffect(() => {
-    const loadDashboard = async () => {
-      try {
-        const [productsRes, categoriesRes] = await Promise.all([
-          fetch("/api/products?limit=100", {
-            cache: "no-store",
-          }),
-          fetch("/api/categories", {
-            cache: "no-store",
-          }),
-        ]);
+  return response.json();
+}
 
-        const productsJson = productsRes.ok
-          ? await productsRes.json()
-          : {};
+async function getDashboardData(): Promise<DashboardData> {
+  const [
+    localProducts,
+    customers,
+    orders,
+    externalApi,
+  ] = await Promise.all([
+    prisma.product.count(),
+    prisma.user.count({
+      where: {
+        role: "CUSTOMER",
+      },
+    }),
+    prisma.order.count(),
+    prisma.externalApi.findFirst({
+      orderBy: {
+        createdAt: "desc",
+      },
+    }),
+  ]);
 
-        const categoriesJson = categoriesRes.ok
-          ? await categoriesRes.json()
-          : {};
+  let siripayProducts = 0;
+  let categories = 0;
+  let siripayConnected = false;
 
-        const products = Array.isArray(productsJson?.products)
-          ? productsJson.products
-          : Array.isArray(productsJson?.data)
-            ? productsJson.data
-            : [];
+  if (!externalApi?.productsUrl) {
+    return {
+      products: localProducts,
+      siripayProducts: 0,
+      categories: 0,
+      customers,
+      orders,
+      siripayConnected: false,
+    };
+  }
 
-        const categories = Array.isArray(
-          categoriesJson?.categories
-        )
-          ? categoriesJson.categories
-          : Array.isArray(categoriesJson?.data)
-            ? categoriesJson.data
-            : [];
-
-        setData({
-          products: products.length,
-          siripayProducts:
-            productsJson?.source === "SIRIPAY"
-              ? products.length
-              : 0,
-          categories: categories.length,
-          customers: 0,
-          orders: 0,
-          siripayConnected:
-            productsJson?.source === "SIRIPAY" ||
-            productsJson?.siripayConnected === true,
-        });
-      } catch (error) {
-        console.error("Dashboard error:", error);
-      } finally {
-        setLoading(false);
-      }
+  try {
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
     };
 
-    loadDashboard();
-  }, []);
+    const authType = String(
+      externalApi.authType ?? "",
+    ).toUpperCase();
+
+    if (
+      authType === "BEARER" &&
+      externalApi.jwtToken?.trim()
+    ) {
+      headers.Authorization =
+        `Bearer ${externalApi.jwtToken.trim()}`;
+    } else if (
+      authType === "BASIC" &&
+      externalApi.username &&
+      externalApi.password
+    ) {
+      const encoded = Buffer.from(
+        `${externalApi.username}:${externalApi.password}`,
+      ).toString("base64");
+
+      headers.Authorization =
+        `Basic ${encoded}`;
+    } else if (
+      authType === "API_KEY" &&
+      externalApi.apiKey?.trim()
+    ) {
+      headers.Authorization =
+        `Bearer ${externalApi.apiKey.trim()}`;
+    }
+
+    // =========================
+    // SIRIPAY PRODUCTS
+    // =========================
+
+    const productsUrl = new URL(
+      externalApi.productsUrl,
+    );
+
+    productsUrl.searchParams.set(
+      "page",
+      "1",
+    );
+
+    productsUrl.searchParams.set(
+      "size",
+      "100",
+    );
+
+    productsUrl.searchParams.set(
+      "limit",
+      "100",
+    );
+
+    console.log(
+      "ADMIN SIRIPAY PRODUCTS:",
+      productsUrl.toString(),
+    );
+
+    const productsData = await fetchJson(
+      productsUrl.toString(),
+      headers,
+    );
+
+    const products = findArray(
+      productsData,
+      [
+        "products",
+        "results",
+        "items",
+        "content",
+        "data",
+      ],
+    );
+
+    siripayProducts = products.length;
+
+    // =========================
+    // SIRIPAY CATEGORIES
+    // =========================
+
+    let categoryUrl =
+      "https://api.dealer.siripay.co/api/v1/merchandise/categories";
+
+    try {
+      const productUrl = new URL(
+        externalApi.productsUrl,
+      );
+
+      const merchandiseIndex =
+        productUrl.pathname.indexOf(
+          "/merchandise/",
+        );
+
+      if (merchandiseIndex !== -1) {
+        const merchandisePath =
+          productUrl.pathname.substring(
+            0,
+            merchandiseIndex +
+              "/merchandise".length,
+          );
+
+        categoryUrl =
+          `${productUrl.protocol}//${productUrl.host}${merchandisePath}/categories`;
+      }
+    } catch {
+      // Default SiriPay category URL remains active.
+    }
+
+    console.log(
+      "ADMIN SIRIPAY CATEGORIES:",
+      categoryUrl,
+    );
+
+    const categoriesData =
+      await fetchJson(
+        categoryUrl,
+        headers,
+      );
+
+    const categoryArray = findArray(
+      categoriesData,
+      [
+        "categories",
+        "results",
+        "items",
+        "content",
+        "data",
+      ],
+    );
+
+    categories = categoryArray.length;
+
+    siripayConnected = true;
+
+    console.log(
+      "ADMIN SIRIPAY PRODUCTS:",
+      siripayProducts,
+    );
+
+    console.log(
+      "ADMIN SIRIPAY CATEGORIES:",
+      categories,
+    );
+  } catch (error) {
+    console.error(
+      "ADMIN DASHBOARD SIRIPAY ERROR:",
+      error,
+    );
+  }
+
+  return {
+    // SiriPay catalogue is the live catalogue.
+    products:
+      siripayProducts > 0
+        ? siripayProducts
+        : localProducts,
+
+    siripayProducts,
+
+    categories,
+
+    customers,
+
+    orders,
+
+    siripayConnected,
+  };
+}
+
+export default async function AdminPage() {
+  // ==========================================
+  // ADMIN AUTHENTICATION
+  // ==========================================
+
+  const userId = await getCurrentUserId();
+
+  // No logged-in user
+  if (!userId) {
+    redirect("/admin/login");
+  }
+
+  // Get logged-in user
+  const user = await prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+  });
+
+  // User doesn't exist
+  if (!user) {
+    redirect("/admin/login");
+  }
+
+  // Customer cannot access admin
+  if (user.role === "CUSTOMER") {
+    redirect("/admin/login");
+  }
+
+  // ==========================================
+  // DASHBOARD DATA
+  // ==========================================
+
+  const data = await getDashboardData();
 
   return (
     <div className="min-h-screen bg-[#f5f8f1] text-[#17261c]">
-
       <div className="flex min-h-screen">
 
-        {/* SIDEBAR */}
+        {/* ==========================================
+            SIDEBAR
+        ========================================== */}
 
         <aside className="hidden w-[260px] shrink-0 border-r border-[#dfe8dc] bg-white lg:flex lg:flex-col">
 
-          <div className="flex h-[84px] items-center border-b border-[#e4ebe1] px-6">
+          {/* BRAND */}
 
+          <div className="flex h-[84px] items-center border-b border-[#e4ebe1] px-6">
             <div className="flex items-center gap-3">
 
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#08783b] text-white">
@@ -126,8 +362,9 @@ export default function AdminPage() {
               </div>
 
             </div>
-
           </div>
+
+          {/* NAVIGATION */}
 
           <div className="flex-1 px-4 py-6">
 
@@ -139,50 +376,66 @@ export default function AdminPage() {
 
               <SideItem
                 href="/admin"
-                icon={<LayoutDashboard size={17} />}
+                icon={
+                  <LayoutDashboard size={17} />
+                }
                 label="Dashboard"
                 active
               />
 
               <SideItem
                 href="/admin/orders"
-                icon={<ShoppingBag size={17} />}
+                icon={
+                  <ShoppingBag size={17} />
+                }
                 label="Orders"
               />
 
               <SideItem
                 href="/admin/products"
-                icon={<Package size={17} />}
+                icon={
+                  <Package size={17} />
+                }
                 label="Products"
               />
 
               <SideItem
                 href="/admin/products/bulk-import"
-                icon={<FileSpreadsheet size={17} />}
+                icon={
+                  <FileSpreadsheet size={17} />
+                }
                 label="Bulk Import"
               />
 
               <SideItem
                 href="/admin/categories"
-                icon={<Boxes size={17} />}
+                icon={
+                  <Boxes size={17} />
+                }
                 label="Categories"
               />
 
               <SideItem
                 href="/admin/customers"
-                icon={<Users size={17} />}
+                icon={
+                  <Users size={17} />
+                }
                 label="Customers"
               />
 
               <SideItem
                 href="/admin/analytics"
-                icon={<BarChart3 size={17} />}
+                icon={
+                  <BarChart3 size={17} />
+                }
                 label="Analytics"
               />
 
               <SideItem
                 href="/admin/external-api"
-                icon={<Settings size={17} />}
+                icon={
+                  <Settings size={17} />
+                }
                 label="API Settings"
               />
 
@@ -194,27 +447,60 @@ export default function AdminPage() {
 
             <SideItem
               href="/admin/settings"
-              icon={<Settings size={17} />}
+              icon={
+                <Settings size={17} />
+              }
               label="Settings"
             />
 
           </div>
 
+          {/* ADMIN USER + LOGOUT */}
+
           <div className="border-t border-[#e4ebe1] p-4">
 
-            <Link
-              href="/api/admin/logout"
-              className="flex items-center gap-3 rounded-xl bg-[#f6f9f4] p-3 text-xs font-semibold text-[#68786d] hover:text-[#08783b]"
-            >
-              <LogOut size={16} />
-              Logout
-            </Link>
+            <div className="flex items-center gap-3 rounded-2xl bg-[#f6f9f4] p-3">
+
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#08783b] text-xs font-bold text-white">
+                {user.name
+                  ?.charAt(0)
+                  ?.toUpperCase() || "A"}
+              </div>
+
+              <div className="min-w-0 flex-1">
+
+                <p className="truncate text-xs font-semibold">
+                  {user.name || "Admin"}
+                </p>
+
+                <p className="truncate text-[10px] text-[#8a998d]">
+                  {user.email}
+                </p>
+
+              </div>
+
+              <form
+                action="/api/admin/logout"
+                method="POST"
+              >
+                <button
+                  type="submit"
+                  aria-label="Logout"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-[#7d8e81] transition hover:bg-white hover:text-[#08783b]"
+                >
+                  <LogOut size={14} />
+                </button>
+              </form>
+
+            </div>
 
           </div>
 
         </aside>
 
-        {/* MAIN */}
+        {/* ==========================================
+            MAIN
+        ========================================== */}
 
         <section className="min-w-0 flex-1">
 
@@ -223,6 +509,7 @@ export default function AdminPage() {
           <header className="flex h-[84px] items-center justify-between border-b border-[#dfe8dc] bg-white px-5 md:px-8">
 
             <div>
+
               <p className="hidden text-[10px] font-semibold uppercase tracking-[0.25em] text-[#78907d] sm:block">
                 EXECUTIVE CONTROL
               </p>
@@ -230,9 +517,12 @@ export default function AdminPage() {
               <h1 className="text-base font-bold">
                 Dashboard
               </h1>
+
             </div>
 
             <div className="flex items-center gap-3">
+
+              {/* SIRIPAY STATUS */}
 
               <div className="hidden items-center gap-2 rounded-full bg-[#f0f8eb] px-4 py-2 text-xs font-semibold text-[#08783b] sm:flex">
 
@@ -251,6 +541,8 @@ export default function AdminPage() {
 
               </div>
 
+              {/* NOTIFICATION */}
+
               <button
                 type="button"
                 className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-[#dce7dc] bg-white"
@@ -262,6 +554,8 @@ export default function AdminPage() {
 
                 <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#f0b400]" />
               </button>
+
+              {/* ADD PRODUCT */}
 
               <Link
                 href="/admin/products/new"
@@ -277,7 +571,9 @@ export default function AdminPage() {
 
           <div className="mx-auto max-w-[1500px] p-5 md:p-8">
 
-            {/* HERO */}
+            {/* ==========================================
+                HERO
+            ========================================== */}
 
             <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-[#07843f] via-[#0a783a] to-[#2f8138] px-7 py-10 text-white md:px-14">
 
@@ -310,6 +606,7 @@ export default function AdminPage() {
                   href="/admin/products"
                   className="flex w-fit items-center gap-3 rounded-2xl bg-[#ffd928] px-7 py-5 text-sm font-extrabold text-[#075d32]"
                 >
+
                   <Package size={18} />
 
                   <span>
@@ -319,49 +616,58 @@ export default function AdminPage() {
                   </span>
 
                   <ChevronRight size={18} />
+
                 </Link>
 
               </div>
 
             </div>
 
-            {/* STATS */}
+            {/* ==========================================
+                STATS
+            ========================================== */}
 
             <div className="mt-7 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
 
               <Stat
                 title="Total Products"
                 value={data.products}
-                icon={<Package size={22} />}
-                loading={loading}
+                icon={
+                  <Package size={22} />
+                }
               />
 
               <Stat
                 title="SiriPay Products"
                 value={data.siripayProducts}
-                icon={<Sparkles size={22} />}
+                icon={
+                  <Sparkles size={22} />
+                }
                 yellow
-                loading={loading}
               />
 
               <Stat
                 title="Categories"
                 value={data.categories}
-                icon={<Boxes size={22} />}
-                loading={loading}
+                icon={
+                  <Boxes size={22} />
+                }
               />
 
               <Stat
                 title="Customers"
                 value={data.customers}
-                icon={<Users size={22} />}
+                icon={
+                  <Users size={22} />
+                }
                 yellow
-                loading={loading}
               />
 
             </div>
 
-            {/* MANAGEMENT */}
+            {/* ==========================================
+                MANAGEMENT
+            ========================================== */}
 
             <div className="mt-8">
 
@@ -381,28 +687,36 @@ export default function AdminPage() {
 
                 <Action
                   href="/admin/products"
-                  icon={<Package size={20} />}
+                  icon={
+                    <Package size={20} />
+                  }
                   title="Products"
                   text="Manage complete catalogue"
                 />
 
                 <Action
                   href="/admin/categories"
-                  icon={<Boxes size={20} />}
+                  icon={
+                    <Boxes size={20} />
+                  }
                   title="Categories"
                   text="Manage all categories"
                 />
 
                 <Action
                   href="/admin/orders"
-                  icon={<ShoppingBag size={20} />}
+                  icon={
+                    <ShoppingBag size={20} />
+                  }
                   title="Orders"
                   text="Manage customer orders"
                 />
 
                 <Action
                   href="/admin/customers"
-                  icon={<Users size={20} />}
+                  icon={
+                    <Users size={20} />
+                  }
                   title="Customers"
                   text="Manage customer accounts"
                 />
@@ -411,7 +725,9 @@ export default function AdminPage() {
 
             </div>
 
-            {/* SIRIPAY */}
+            {/* ==========================================
+                SIRIPAY
+            ========================================== */}
 
             <div className="mt-7 rounded-[26px] border border-[#dce7d9] bg-white p-6">
 
@@ -464,6 +780,83 @@ export default function AdminPage() {
 
               </div>
 
+              {/* LIVE CATALOGUE INFO */}
+
+              {data.siripayConnected && (
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+
+                  <div className="rounded-2xl bg-[#f6f9f4] p-4">
+
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8ca08d]">
+                      Live Products
+                    </p>
+
+                    <p className="mt-1 text-2xl font-extrabold text-[#08783b]">
+                      {data.siripayProducts.toLocaleString(
+                        "en-IN",
+                      )}
+                    </p>
+
+                  </div>
+
+                  <div className="rounded-2xl bg-[#fffbea] p-4">
+
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9a8b4d]">
+                      Live Categories
+                    </p>
+
+                    <p className="mt-1 text-2xl font-extrabold text-[#075d32]">
+                      {data.categories.toLocaleString(
+                        "en-IN",
+                      )}
+                    </p>
+
+                  </div>
+
+                </div>
+              )}
+
+            </div>
+
+            {/* ==========================================
+                ACCOUNT
+            ========================================== */}
+
+            <div className="mt-7 rounded-[26px] border border-[#dce7d9] bg-white p-6">
+
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+                <div>
+
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#8ca08d]">
+                    Signed In As
+                  </p>
+
+                  <h3 className="mt-1 text-lg font-extrabold">
+                    {user.name || "Admin"}
+                  </h3>
+
+                  <p className="mt-1 text-xs text-[#7c8c80]">
+                    {user.email}
+                  </p>
+
+                </div>
+
+                <form
+                  action="/api/admin/logout"
+                  method="POST"
+                >
+                  <button
+                    type="submit"
+                    className="flex items-center gap-2 rounded-xl bg-[#f6f9f4] px-5 py-3 text-xs font-bold text-[#68786d] transition hover:bg-[#edf8e8] hover:text-[#08783b]"
+                  >
+                    <LogOut size={16} />
+                    Logout
+                  </button>
+                </form>
+
+              </div>
+
             </div>
 
           </div>
@@ -471,12 +864,13 @@ export default function AdminPage() {
         </section>
 
       </div>
-
     </div>
   );
 }
 
-/* SIDEBAR */
+/* ==========================================
+   SIDEBAR ITEM
+========================================== */
 
 function SideItem({
   href,
@@ -514,20 +908,20 @@ function SideItem({
   );
 }
 
-/* STAT */
+/* ==========================================
+   STAT CARD
+========================================== */
 
 function Stat({
   title,
   value,
   icon,
   yellow = false,
-  loading = false,
 }: {
   title: string;
   value: number;
   icon: React.ReactNode;
   yellow?: boolean;
-  loading?: boolean;
 }) {
   return (
     <div className="rounded-[26px] border border-[#dce7d9] bg-white p-7 shadow-sm">
@@ -554,19 +948,15 @@ function Stat({
         {title}
       </p>
 
-      {loading ? (
-        <div className="mt-3 h-10 w-24 animate-pulse rounded-lg bg-[#edf2ea]" />
-      ) : (
-        <p className="mt-1 text-4xl font-extrabold">
-          {value.toLocaleString("en-IN")}
-        </p>
-      )}
+      <p className="mt-1 text-4xl font-extrabold">
+        {value.toLocaleString("en-IN")}
+      </p>
 
     </div>
   );
 }
 
-/* ACTION */
+
 
 function Action({
   href,
